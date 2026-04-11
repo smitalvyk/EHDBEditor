@@ -44,7 +44,7 @@ const updatePreview = async (index, fileName) => {
   }
   
   const staticPath = fileName.includes('.') ? fileName : `${fileName}.png`;
-  imagePreviews.value[index] = `/sprites/${staticPath}`;
+  previews.value[index] = `${import.meta.env.BASE_URL}sprites/${staticPath}`;
 };
 
 // --- PARSING ---

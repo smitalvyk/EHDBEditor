@@ -270,7 +270,8 @@ const globSprites = import.meta.glob([
 const allLocalSprites = {};
 for (const path in globSprites) {
   if (path.startsWith('/public/')) {
-    allLocalSprites[path] = path.replace('/public', ''); 
+    // Prepend Vite's base URL so it works on GitHub Pages
+    allLocalSprites[path] = import.meta.env.BASE_URL + path.replace('/public/', ''); 
   } else {
     allLocalSprites[path] = globSprites[path].default || globSprites[path];
   }

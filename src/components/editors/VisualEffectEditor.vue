@@ -53,7 +53,7 @@ const resolveImage = async (index, imageName) => {
 
   // 2. Fallback static path
   const staticPath = imageName.includes('.') ? imageName : `${imageName}.png`;
-  previews.value[index] = `/sprites/${staticPath}`;
+  previews.value[index] = `${import.meta.env.BASE_URL}sprites/${staticPath}`;
 };
 
 watch(() => props.modelValue, (newVal) => {
