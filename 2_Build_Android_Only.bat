@@ -1,5 +1,18 @@
 @echo off
 color 0E
+
+echo ===================================================
+echo   Building Web App...
+echo ===================================================
+call npm run build
+
+echo.
+echo ===================================================
+echo   Syncing Capacitor with Android...
+echo ===================================================
+call npx cap sync android
+
+echo.
 echo ===================================================
 echo   Setting Environment Variables...
 echo ===================================================

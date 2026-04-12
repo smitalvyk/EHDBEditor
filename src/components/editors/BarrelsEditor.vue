@@ -169,12 +169,35 @@ const removeBarrel = (idx) => {
 .ic-index { font-weight: bold; color: #ffaa00; font-size: 12px; font-family: monospace; }
 .ic-title { flex: 1; font-weight: bold; color: var(--text-primary); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .btn-del { background: rgba(255,50,50,0.1); color: #ff5555; border: 1px solid #ff5555; width: 24px; height: 24px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-.ic-row { display: flex; gap: 10px; }
-.field-box { display: flex; align-items: center; gap: 8px; flex: 1; background: rgba(255,255,255,0.02); padding: 6px; border: 1px solid rgba(255,255,255,0.05); border-radius: 4px;}
+
+/* Desktop Row Styles */
+.ic-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.field-box { display: flex; align-items: center; gap: 8px; flex: 1 1 calc(33.333% - 10px); min-width: 120px; background: rgba(255,255,255,0.02); padding: 6px; border: 1px solid rgba(255,255,255,0.05); border-radius: 4px;}
 .field-box label { font-size: 10px; font-weight: bold; color: var(--text-secondary); opacity: 0.8; width: 80px; text-transform: uppercase; white-space: nowrap;}
-.win-input { flex: 1; width: 100%; padding: 4px 6px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: white; border-radius: 4px; font-size: 11px; }
+.win-input { flex: 1; width: 100%; padding: 4px 6px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: white; border-radius: 4px; font-size: 11px; box-sizing: border-box;}
 .win-input:focus { border-color: var(--accent-color); outline: none; }
 .btn-add { width: 100%; padding: 6px; background: transparent; border: 1px dashed var(--border-light); color: var(--text-secondary); cursor: pointer; border-radius: 4px; transition: 0.2s; }
 .btn-add:hover { border-color: #ffaa00; color: #ffaa00; background: rgba(255, 170, 0, 0.05); }
 .btn-add.giant { padding: 12px; font-size: 14px; border-color: #ffaa00; color: #ffaa00; margin-top: 5px;}
+
+/* === RESPONSIVE (MOBILE) === */
+@media (max-width: 768px) {
+  .ic-row {
+    flex-direction: column; /* Force rows to stack entirely */
+    gap: 8px;
+  }
+  
+  .field-box {
+    flex-direction: column; /* Move label above input */
+    align-items: flex-start;
+    flex: 1 1 100%; /* Take up the entire width */
+    gap: 4px;
+    padding: 8px;
+  }
+  
+  .field-box label {
+    width: 100%; /* Let the label take full width */
+    margin-bottom: 2px;
+  }
+}
 </style>

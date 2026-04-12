@@ -143,15 +143,15 @@ const previewText = computed(() => {
           <template v-else-if="isAudio">🎵</template>
           <template v-else-if="isXml">🌐</template>
           <template v-else-if="isJson">📄</template>
-          <template v-else>📝</template>
+          <template v-else>❓</template>
         </span>
         <h2 class="file-name">{{ file.name }}</h2>
       </div>
 
       <div class="editor-buttons">
         
-        <button v-if="!isImage && !isAudio" @click="$emit('open-editor')" class="btn-action btn-code">
-          <span class="icon">{}</span> {{ isXml ? 'RAW XML' : (isJson ? 'JSON' : 'EDIT') }}
+        <button v-if="isJson || isXml" @click="$emit('open-editor')" class="btn-action btn-code">
+          <span class="icon">{}</span> {{ isXml ? 'RAW XML' : 'RAW JSON' }}
         </button>
         
         <button v-if="isJson" @click="$emit('open-visual')" class="btn-action btn-visual">
@@ -227,14 +227,21 @@ const previewText = computed(() => {
 
       <div v-else-if="isAudio" class="audio-viewer-container">
         <div class="unsupported-message">
-          <h3>Media Format Not Supported</h3>
-          <p>This file type cannot be opened in the text editor.</p>
+          <h3>Audio Preview</h3>
+          <p>Listen to the audio track below.</p>
         </div>
         <audio v-if="audioUrl" controls :src="audioUrl" class="audio-player"></audio>
       </div>
 
-      <div v-else class="text-wrapper">
+      <div v-else-if="isXml" class="text-wrapper">
         <pre class="code-view">{{ previewText }}</pre>
+      </div>
+
+      <div v-else class="unsupported-viewer-container">
+        <div class="unsupported-message">
+          <h3>Format Not Supported</h3>
+          <p>This file extension is not supported by the editor.</p>
+        </div>
       </div>
       
     </div>
@@ -256,7 +263,7 @@ const previewText = computed(() => {
   border-bottom: 2px solid var(--border-light); 
   padding-bottom: 15px; 
   gap: 15px;
-  flex-wrap: wrap; /* Allows wrapping on smaller screens */
+  flex-wrap: wrap;
 }
 
 .file-identity { 
@@ -321,12 +328,12 @@ const previewText = computed(() => {
 /* CARD WRAPPER FOR JSON */
 .card-wrapper {
   flex: 1;
-  overflow: auto; /* Changed from hidden to auto for internal scrolling */
+  overflow: auto; 
   background: transparent;
 }
 
-/* AUDIO VIEWER */
-.audio-viewer-container {
+/* CENTERED VIEWERS (Audio & Unsupported) */
+.audio-viewer-container, .unsupported-viewer-container {
   flex: 1;
   display: flex;
   flex-direction: column;

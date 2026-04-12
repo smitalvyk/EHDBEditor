@@ -144,11 +144,34 @@ const removeEngine = (idx) => {
 .btn-collapse:hover { opacity: 1; color: white; }
 .ic-index { flex: 1; font-weight: bold; font-size: 12px; font-family: monospace; }
 .btn-del { background: rgba(255,50,50,0.1); color: #ff5555; border: 1px solid #ff5555; width: 24px; height: 24px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-.ic-row { display: flex; gap: 10px; }
-.field-box { display: flex; align-items: center; gap: 8px; flex: 1; background: rgba(255,255,255,0.02); padding: 6px; border: 1px solid rgba(255,255,255,0.05); border-radius: 4px;}
+
+/* Desktop Row Styles */
+.ic-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.field-box { display: flex; align-items: center; gap: 8px; flex: 1 1 calc(33.333% - 10px); min-width: 120px; background: rgba(255,255,255,0.02); padding: 6px; border: 1px solid rgba(255,255,255,0.05); border-radius: 4px;}
 .field-box label { font-size: 10px; font-weight: bold; color: var(--text-secondary); width: 80px; text-transform: uppercase; }
-.win-input { flex: 1; width: 100%; padding: 4px 6px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: white; border-radius: 4px; font-size: 11px; }
+.win-input { flex: 1; width: 100%; padding: 4px 6px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: white; border-radius: 4px; font-size: 11px; box-sizing: border-box;}
 .win-input:focus { border-color: var(--accent-color); outline: none; }
 .btn-add { width: 100%; padding: 12px; background: transparent; border: 1px dashed; cursor: pointer; border-radius: 4px; font-weight: bold; transition: 0.2s; }
 .btn-add:hover { background: rgba(255, 255, 68, 0.05); }
+
+/* === RESPONSIVE (MOBILE) === */
+@media (max-width: 768px) {
+  .ic-row {
+    flex-direction: column; 
+    gap: 8px;
+  }
+  
+  .field-box {
+    flex-direction: column; 
+    align-items: flex-start;
+    flex: 1 1 100%; 
+    gap: 4px;
+    padding: 8px;
+  }
+  
+  .field-box label {
+    width: 100%; 
+    margin-bottom: 2px;
+  }
+}
 </style>

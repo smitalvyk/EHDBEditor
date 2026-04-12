@@ -158,14 +158,43 @@ export function useFileSystem() {
     return await file.text();
   };
 
-  const saveFileContent = async (handle, content) => {
-    if (handle.kind === 'native') {
-      await Filesystem.writeFile({ path: handle.path, data: content, directory: Directory.Documents, encoding: Encoding.UTF8 });
+  const saveFileContent = async (handle, content, fileName = 'file.json') => {
+    // 1. Native Android App (Capacitor)
+    if (handle && handle.kind === 'native') {
+      await Filesystem.writeFile({ 
+        path: handle.path, 
+        data: content, 
+        directory: Directory.Documents, 
+        encoding: Encoding.UTF8 
+      });
       return;
     }
-    const writable = await handle.createWritable();
-    await writable.write(content);
-    await writable.close();
+
+    // 2. PC Browser (File System Access API)
+    if (handle && handle.createWritable) {
+      try {
+        const writable = await handle.createWritable();
+        await writable.write(content);
+        await writable.close();
+        return;
+      } catch (e) {
+        console.warn("Direct write failed, falling back to download", e);
+      }
+    }
+
+    // 3. Fallback for Mobile Web Browsers (Download)
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    
+    // Try to get the name from the handle, otherwise use fallback
+    a.download = handle && handle.name ? handle.name : fileName;
+    
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const selectFile = async (fileNode) => {
