@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, onMounted } from 'vue';
 import { itemSchemas, defaultSchema, FieldType } from '../../data/itemSchemas';
 import { ItemTypeNames, SelectOptions, QualityDefinition } from '../../data/enums';
 import { useGameDatabase } from '../../composables/useGameDatabase';
@@ -26,6 +26,7 @@ import BarrelsEditor from './BarrelsEditor.vue';
 import EnginesEditor from './EnginesEditor.vue';
 import ShipFeaturesEditor from './ShipFeaturesEditor.vue';
 import ShipVisualEffectsEditor from './ShipVisualEffectsEditor.vue';
+import LayoutInfo from './LayoutInfo.vue'; // <-- ДОБАВЛЕНО ИМПОРТ НОВОГО КОМПОНЕНТА
 
 const props = defineProps({
   modelValue: { type: Object, default: () => ({}) },
@@ -40,6 +41,18 @@ const { getItemsByType } = useGameDatabase();
 const { searchImageFile } = useFileSystem();
 const { getTranslations } = useLocalization();
 const imagePreviews = ref({});
+
+// === SHIP STATS MODAL ===
+const isShipStatsOpen = ref(false);
+const globalShipSettings = ref({});
+
+onMounted(() => {
+  // Пытаемся найти ItemType 100 (ShipSettings) в базе данных при открытии редактора
+  const settingsItems = getItemsByType(100);
+  if (settingsItems && settingsItems.length > 0) {
+    globalShipSettings.value = settingsItems[0].data; // Берем первый найденный файл настроек
+  }
+});
 
 // === BLOCK COLLAPSING ===
 const collapsedFields = ref({});
@@ -270,7 +283,6 @@ const globSprites = import.meta.glob([
 const allLocalSprites = {};
 for (const path in globSprites) {
   if (path.startsWith('/public/')) {
-    // Prepend Vite's base URL so it works on GitHub Pages
     allLocalSprites[path] = import.meta.env.BASE_URL + path.replace('/public/', ''); 
   } else {
     allLocalSprites[path] = globSprites[path].default || globSprites[path];
@@ -338,10 +350,15 @@ watch(() => props.modelValue, async (newVal) => {
 
 <template>
   <div class="editor-layout">
+    
     <div class="editor-header">
       <div class="title-row">
         <h3>{{ schema.title }}</h3>
         <span class="type-badge">ID: {{ ItemTypeNames[itemType] || itemType }}</span>
+      </div>
+      
+      <div class="header-actions" v-if="itemType === 6">
+        <button @click="isShipStatsOpen = true" class="btn-stats" title="Calculate Ship Statistics">📊 Ship Stats</button>
       </div>
     </div>
 
@@ -629,15 +646,55 @@ watch(() => props.modelValue, async (newVal) => {
         <button v-for="key in missingFields" :key="key" @click="addField(key)" class="chip-add">+ {{ schema.fields[key].label }}</button>
       </div>
     </div>
+
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="isShipStatsOpen" class="modal-backdrop" @click.self="isShipStatsOpen = false">
+          <div class="modal-window stats-modal">
+            
+            <div class="modal-header">
+              <div class="modal-title">Ship Statistics</div>
+              <div class="modal-actions">
+                <button @click="isShipStatsOpen = false" class="btn-close">Close</button>
+              </div>
+            </div>
+
+            <div class="modal-body stats-modal-body">
+              <LayoutInfo 
+                :layout="modelValue.Layout" 
+                :shipData="modelValue" 
+                :shipSettings="globalShipSettings" 
+              />
+            </div>
+            
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
   </div>
 </template>
 
 <style scoped>
 .editor-layout { padding: 20px 25px; color: var(--text-primary); font-size: 13px; }
-.editor-header { padding-bottom: 15px; margin-bottom: 15px; border-bottom: 1px solid transparent; }
+.editor-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; margin-bottom: 15px; border-bottom: 1px solid transparent; }
 .title-row { display: flex; align-items: center; gap: 10px; }
 .title-row h3 { margin: 0; font-size: 18px; font-weight: 600; }
 .type-badge { background: #444; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+
+/* КНОПКА SHIP STATS */
+.header-actions { display: flex; align-items: center; }
+.btn-stats { background: rgba(85, 170, 255, 0.1); color: #55aaff; border: 1px solid #55aaff; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s; display: flex; align-items: center; gap: 6px;}
+.btn-stats:hover { background: #55aaff; color: white; box-shadow: 0 0 8px rgba(85, 170, 255, 0.4);}
+
+/* СТИЛИ ДЛЯ МОДАЛКИ СТАТИСТИКИ */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px); z-index: 2000; display: flex; align-items: center; justify-content: center; }
+.stats-modal { width: 95vw; max-width: 600px; height: auto; max-height: 90vh; background: var(--app-bg, #1e1e1e); border-radius: 12px; display: flex; flex-direction: column; border: 1px solid var(--border-light); overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }
+.modal-header { height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--border-light); background: var(--sidebar-bg, #252526); }
+.modal-title { font-weight: bold; font-size: 16px; color: var(--accent-color); text-transform: uppercase; }
+.btn-close { background: rgba(255, 255, 255, 0.1); color: var(--text-primary); border: 1px solid var(--border-light); padding: 6px 16px; border-radius: 4px; cursor: pointer; transition: background 0.2s; }
+.btn-close:hover { background: rgba(255, 255, 255, 0.2); }
+.stats-modal-body { padding: 15px; overflow-y: auto; background: #1a1a1a; }
 
 .properties-list { display: flex; flex-direction: column; gap: 10px; }
 
@@ -791,5 +848,13 @@ input:checked + .slider:before { transform: translateX(14px); }
 @keyframes pulse {
   from { opacity: 0.8; }
   to { opacity: 1; }
+}
+
+@media (max-width: 600px) {
+  .editor-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
 }
 </style>

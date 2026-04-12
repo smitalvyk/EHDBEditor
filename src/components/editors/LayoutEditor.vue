@@ -48,6 +48,10 @@ const currentTool = ref('brush');
 const polySides = ref(3);
 const polyRotation = ref(0);
 
+// SYMMETRY
+const isSymmetryX = ref(false); // Mirrors Left/Right
+const isSymmetryY = ref(false); // Mirrors Top/Bottom
+
 // ZOOM
 const zoomLevel = ref(100);
 const resetZoom = () => { zoomLevel.value = 100; };
@@ -101,7 +105,7 @@ const closeEditor = () => {
   isModalOpen.value = false;
 };
 
-// GRID SIZING (Step 1, add/remove from bottom-right)
+// GRID SIZING
 const setGridSize = (delta) => {
   let newSize = gridSize.value + delta;
   if (newSize < 1) newSize = 1;
@@ -215,6 +219,22 @@ const getShapeIndices = (startX, startY, endX, endY, tool, sides, rotation) => {
   return indices;
 };
 
+// SYMMETRY HELPER
+const getSymmetricIndices = (index) => {
+  const x = index % gridSize.value;
+  const y = Math.floor(index / gridSize.value);
+  const symX = gridSize.value - 1 - x;
+  const symY = gridSize.value - 1 - y;
+
+  const indices = new Set([index]);
+
+  if (isSymmetryX.value) indices.add(y * gridSize.value + symX);
+  if (isSymmetryY.value) indices.add(symY * gridSize.value + x);
+  if (isSymmetryX.value && isSymmetryY.value) indices.add(symY * gridSize.value + symX);
+
+  return Array.from(indices);
+};
+
 // DRAWING EVENT DELEGATION
 let drawingBrush = '1';
 let shapeStartX = 0;
@@ -223,12 +243,24 @@ const backupGrid = ref([]);
 let previousShapeIndices = [];
 
 const paintCell = (index, brush) => {
-  if (gridData.value[index] !== brush) gridData.value[index] = brush;
+  const indices = getSymmetricIndices(index);
+  for (const idx of indices) {
+    if (gridData.value[idx] !== brush) gridData.value[idx] = brush;
+  }
 };
 
 const updateShapePreview = (startX, startY, endX, endY, brush) => {
   for (const idx of previousShapeIndices) { gridData.value[idx] = backupGrid.value[idx]; }
-  const newIndices = getShapeIndices(startX, startY, endX, endY, currentTool.value, polySides.value, polyRotation.value);
+  
+  const baseIndices = getShapeIndices(startX, startY, endX, endY, currentTool.value, polySides.value, polyRotation.value);
+  
+  const symIndices = new Set();
+  for (const idx of baseIndices) {
+    const mirrored = getSymmetricIndices(idx);
+    for (const m of mirrored) symIndices.add(m);
+  }
+  
+  const newIndices = Array.from(symIndices);
   for (const idx of newIndices) { gridData.value[idx] = brush; }
   previousShapeIndices = newIndices;
 };
@@ -458,6 +490,11 @@ const onInputStringChange = (e) => {
                   </button>
                 </div>
 
+                <div class="toolbar-group" v-if="!isPanMode">
+                  <button @click="isSymmetryX = !isSymmetryX" class="btn-tool sym-btn" :class="{ active: isSymmetryX }" title="Mirror Left/Right">Sym X</button>
+                  <button @click="isSymmetryY = !isSymmetryY" class="btn-tool sym-btn" :class="{ active: isSymmetryY }" title="Mirror Top/Bottom">Sym Y</button>
+                </div>
+
                 <div class="toolbar-group" v-if="isPC && !isPanMode">
                   <button @click="currentTool = 'brush'" class="btn-tool tool-type-btn" :class="{ active: currentTool === 'brush' }" title="Brush">✎</button>
                   <button @click="currentTool = 'square'" class="btn-tool tool-type-btn" :class="{ active: currentTool === 'square' }" title="Square Box">■</button>
@@ -610,6 +647,7 @@ const onInputStringChange = (e) => {
 .btn-tool:hover { background: rgba(85, 170, 255, 0.3); border-color: #55aaff; }
 .btn-tool.active { background: #ffaa00; border-color: #ffaa00; color: #1e1e1e; }
 .mode-btn { width: 70px; }
+.sym-btn { font-size: 11px; padding: 0 6px; }
 .tool-type-btn { font-size: 15px; padding: 0 8px; }
 
 .shape-label { font-family: monospace; font-size: 11px; color: var(--text-secondary); margin-left: 4px; }
