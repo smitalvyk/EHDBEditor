@@ -12,8 +12,12 @@ import VisualEditorModal from './components/VisualEditorModal.vue';
 import XmlLocalizationEditor from './components/XmlLocalizationEditor.vue';
 import { useValidator } from './composables/useValidator';
 
+// ADDED FOR ANDROID (CAPACITOR)
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Capacitor } from '@capacitor/core';
+
 const { 
-  isNative, availableProjects, loadProjectsList, createNewProject, openNativeProject, // Added new methods
+  isNative, availableProjects, loadProjectsList, createNewProject, openNativeProject,
   openDirectory, filesTree, rootHandle, selectedFile, selectedContent, fileType, 
   selectFile, readFileContent, saveFileContent, deleteFile, moveFile, copyFile 
 } = useFileSystem();
@@ -30,6 +34,11 @@ const isScanning = ref(false);
 const isSidebarOpen = ref(false); 
 const isProjectModalOpen = ref(false);
 const newProjectName = ref('');
+
+// === SCANNING PROGRESS ===
+const scanProgress = ref(0);
+const totalFilesToScan = ref(0);
+const filesScanned = ref(0);
 
 // === SETTINGS & VALIDATION ===
 const isSettingsOpen = ref(false);
@@ -210,6 +219,15 @@ let searchTimeout = null;
 // ==========================================
 const mobileFolderInput = ref(null);
 
+const countFiles = (nodes) => {
+  let count = 0;
+  for (const node of nodes) {
+    if (node.kind === 'file' && node.name.toLowerCase().endsWith('.json')) count++;
+    else if (node.kind === 'directory' && node.children) count += countFiles(node.children);
+  }
+  return count;
+};
+
 const handleMobileFolderSelect = (event) => {
   const files = event.target.files;
   if (!files || files.length === 0) return;
@@ -248,6 +266,9 @@ const handleMobileFolderSelect = (event) => {
   searchQuery.value = '';
   filteredFilesTree.value = filesTree.value;
   isScanning.value = true;
+  scanProgress.value = 0;
+  filesScanned.value = 0;
+  totalFilesToScan.value = countFiles(filesTree.value);
   clearDatabase();
   
   setTimeout(async () => {
@@ -274,10 +295,11 @@ const handleOpenFolder = async () => {
   }
 };
 
-// Function to load specific project (Android)
 const loadAndroidProject = async (projectName) => {
   isProjectModalOpen.value = false;
   isScanning.value = true;
+  scanProgress.value = 0;
+  filesScanned.value = 0;
   await openNativeProject(projectName);
   startIndexing();
 };
@@ -288,12 +310,14 @@ const createProject = async () => {
   newProjectName.value = '';
 };
 
-// Moved indexing to a separate function to avoid code duplication
 const startIndexing = () => {
   if (filesTree.value.length > 0) {
     searchQuery.value = '';
     filteredFilesTree.value = filesTree.value;
     isScanning.value = true;
+    scanProgress.value = 0;
+    filesScanned.value = 0;
+    totalFilesToScan.value = countFiles(filesTree.value);
     clearDatabase();
     setTimeout(async () => {
       if (rootHandle.value) await initNotes(rootHandle.value);
@@ -314,34 +338,38 @@ const scanAllFiles = async (nodes, pathPrefix = '') => {
     } else if (node.kind === 'file' && node.name.toLowerCase().endsWith('.json')) {
       try {
         let text = '';
-        if (node.fileObj) text = await node.fileObj.text(); // Read from RAM (Mobile)
-        else if (node.handle) text = await readFileContent(node.handle); // Read from disk (PC)
+        if (node.fileObj) text = await node.fileObj.text(); 
+        else if (node.handle) text = await readFileContent(node.handle); 
         
         if (text) registerItem(text, node.name, currentPath);
-      } catch (e) { console.warn("Indexing error:", node.name, e); }
+      } catch (e) { 
+        console.error("Indexing error:", node.name, e); 
+      } finally {
+        filesScanned.value++;
+        if (totalFilesToScan.value > 0) {
+          scanProgress.value = Math.floor((filesScanned.value / totalFilesToScan.value) * 100);
+        }
+      }
     }
   }
 };
 
 const handleSave = async (newContent) => {
   if (selectedFile.value) {
-    // If mobile version (File from RAM)
     if (selectedFile.value.fileObj) {
       const blob = new Blob([newContent], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = selectedFile.value.name; // Download modified file
+      a.download = selectedFile.value.name; 
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
-      // Update copy in RAM
       selectedFile.value.fileObj = new File([blob], selectedFile.value.name, { type: 'text/plain' });
       selectedFile.value.handle = { kind: 'file', name: selectedFile.value.name, getFile: async () => selectedFile.value.fileObj };
     } 
-    // If PC version (Direct save)
     else if (selectedFile.value.handle) {
       await saveFileContent(selectedFile.value.handle, newContent);
     }
@@ -357,7 +385,7 @@ const handleSave = async (newContent) => {
 };
 
 const handleSelectFile = async (file) => {
-  selectFile(file); // Base logic for PC
+  selectFile(file); 
   isSidebarOpen.value = false; 
 };
 
@@ -422,7 +450,45 @@ const toggleTheme = () => { isDark.value = !isDark.value; };
 const updateThemeClass = () => document.documentElement.classList.toggle('dark-theme', isDark.value);
 const toggleSidebar = () => { isSidebarOpen.value = !isSidebarOpen.value; };
 
-onMounted(() => { updateThemeClass(); });
+// ==========================================
+// DEVELOPER CONSOLE (LONG PRESS ON SETTINGS)
+// ==========================================
+const isConsoleOpen = ref(false);
+const appLogs = ref([]);
+let longPressTimer = null;
+
+const startLongPress = () => {
+  if (longPressTimer) clearTimeout(longPressTimer);
+  longPressTimer = setTimeout(() => {
+    isConsoleOpen.value = true;
+    isSettingsOpen.value = false;
+  }, 3000); // 3 seconds hold to open console
+};
+
+const cancelLongPress = () => {
+  if (longPressTimer) clearTimeout(longPressTimer);
+};
+
+const setupConsoleInterceptor = () => {
+  const originalLog = console.log;
+  const originalWarn = console.warn;
+  const originalError = console.error;
+
+  const addLog = (type, args) => {
+    const message = Array.from(args).map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+    appLogs.value.push({ type, message, time: new Date().toLocaleTimeString() });
+    if (appLogs.value.length > 200) appLogs.value.shift(); // Keep only last 200 logs
+  };
+
+  console.log = function() { addLog('log', arguments); originalLog.apply(console, arguments); };
+  console.warn = function() { addLog('warn', arguments); originalWarn.apply(console, arguments); };
+  console.error = function() { addLog('error', arguments); originalError.apply(console, arguments); };
+};
+
+onMounted(() => { 
+  updateThemeClass(); 
+  setupConsoleInterceptor();
+});
 </script>
 
 <template>
@@ -436,11 +502,24 @@ onMounted(() => { updateThemeClass(); });
       
       <div class="actions">
         <button @click="handleOpenFolder" class="btn-primary" :disabled="isScanning">
-          <span v-if="isScanning">{{ isLoadingDicts ? '📖 Dictionaries...' : '⏳ Scanning...' }}</span>
+          <span v-if="isScanning">
+            {{ isLoadingDicts ? '📖 Dictionaries...' : `⏳ Scanning... ${scanProgress}%` }}
+          </span>
           <span v-else>📂 Open Folder</span>
         </button>
         <button @click="openValidatorWindow" class="btn-icon" title="Diagnostics">🩺</button>
-        <button @click="isSettingsOpen = true" class="btn-icon" title="Settings">⚙️</button>
+        
+        <button 
+          @mousedown="startLongPress" 
+          @mouseup="cancelLongPress" 
+          @mouseleave="cancelLongPress"
+          @touchstart="startLongPress"
+          @touchend="cancelLongPress"
+          @click="isSettingsOpen = true" 
+          class="btn-icon" 
+          title="Settings (Hold 3s for Console)"
+        >⚙️</button>
+
       </div>
 
       <div class="path-breadcumbs mobile-hidden" v-if="rootHandle">
@@ -494,6 +573,25 @@ onMounted(() => { updateThemeClass(); });
     <XmlLocalizationEditor :isOpen="isVisualOpen && Boolean(selectedFile?.name.toLowerCase().endsWith('.xml'))" :content="selectedContent" :fileName="selectedFile ? selectedFile.name : ''" @close="isVisualOpen = false" @save="handleSave" />
 
     <Teleport to="body">
+      
+      <div v-if="isConsoleOpen" class="modal-overlay" @click.self="isConsoleOpen = false">
+        <div class="settings-modal large-modal">
+          <div class="settings-header">
+            <h3>💻 Developer Console</h3>
+            <button @click="isConsoleOpen = false" class="btn-icon close-btn">✖</button>
+          </div>
+          <div class="settings-body" style="padding: 10px; background: #111;">
+            <div class="console-logs">
+              <div v-if="appLogs.length === 0" style="color: #666; font-style: italic;">No logs recorded yet...</div>
+              <div v-for="(log, i) in appLogs" :key="i" class="log-entry" :class="'log-' + log.type">
+                <span class="log-time">[{{ log.time }}]</span> <span class="log-msg">{{ log.message }}</span>
+              </div>
+            </div>
+            <button @click="appLogs = []" class="btn-secondary" style="width: 100%; margin-top: 10px;">Clear Console</button>
+          </div>
+        </div>
+      </div>
+
       <div v-if="isProjectModalOpen" class="modal-overlay" @click.self="isProjectModalOpen = false">
         <div class="settings-modal" style="width: 400px;">
           <div class="settings-header">
@@ -693,7 +791,7 @@ body { margin: 0; font-family: 'Segoe UI', sans-serif; background: var(--app-bg)
 .btn-primary { background: var(--content-bg); color: var(--text-primary); border: 1px solid var(--border-light); padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; transition: all 0.2s; min-width: 100px; display: flex; justify-content: center; }
 .btn-primary:hover:not(:disabled) { background: var(--item-hover); }
 .btn-primary:disabled { opacity: 0.7; cursor: wait; }
-.btn-icon { background: transparent; border: none; cursor: pointer; font-size: 18px; padding: 6px; border-radius: var(--radius-sm); color: var(--text-primary); }
+.btn-icon { background: transparent; border: none; cursor: pointer; font-size: 18px; padding: 6px; border-radius: var(--radius-sm); color: var(--text-primary); user-select: none; -webkit-user-select: none;}
 .btn-icon:hover { background: var(--item-hover); }
 
 .path-breadcumbs { font-size: 12px; color: var(--text-secondary); border-left: 1px solid var(--border-light); padding-left: 10px; margin-left: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -753,6 +851,14 @@ input:checked + .warning-slider { background-color: #ffaa00 !important; }
 .cursor-pointer { cursor: pointer; user-select: none; }
 .btn-secondary { background: var(--sidebar-bg); color: var(--text-primary); border: 1px solid var(--border-light); padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; transition: 0.2s;}
 .btn-secondary:hover { background: var(--item-hover); }
+
+/* === CONSOLE === */
+.console-logs { font-family: 'Consolas', monospace; font-size: 11px; max-height: 50vh; overflow-y: auto; padding: 10px; border-radius: 4px; background: #000; border: 1px solid #333;}
+.log-entry { margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px dashed #333; word-wrap: break-word;}
+.log-time { color: #888; margin-right: 8px; }
+.log-log { color: #fff; }
+.log-warn { color: #ffaa00; }
+.log-error { color: #ff5555; font-weight: bold; }
 
 /* === VALIDATOR === */
 .large-modal { width: 800px; max-width: 95vw; }

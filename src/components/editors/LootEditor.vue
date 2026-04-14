@@ -107,7 +107,7 @@ const updateItemLoot = (index, newLootObj) => {
       <div v-if="showAmounts" class="field-row"><label>MinAmount</label><input type="number" :value="modelValue?.MinAmount || 0" @input="e => updateField('MinAmount', parseInt(e.target.value))" class="win-input"></div>
       <div v-if="showAmounts" class="field-row"><label>MaxAmount</label><input type="number" :value="modelValue?.MaxAmount || 0" @input="e => updateField('MaxAmount', parseInt(e.target.value))" class="win-input"></div>
       
-      <div v-if="showRatio" class="field-row"><label>ValueRatio</label><input type="number" :value="modelValue?.ValueRatio || 0" @input="e => updateField('ValueRatio', parseFloat(e.target.value))" class="win-input" step="0.1"></div>
+      <div v-if="showRatio" class="field-row full-row"><label>ValueRatio</label><input type="number" :value="modelValue?.ValueRatio || 0" @input="e => updateField('ValueRatio', parseFloat(e.target.value))" class="win-input" step="0.1"></div>
 
     </div>
 
@@ -166,9 +166,17 @@ const updateItemLoot = (index, newLootObj) => {
 .loot-header {
   display: flex; justify-content: space-between; align-items: center;
   border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;
+  width: 100%;
 }
-.type-select-row { display: flex; gap: 10px; align-items: center; flex: 1; }
-.type-select-row label { font-weight: bold; min-width: 70px; font-size: 12px; }
+
+.type-select-row { 
+  display: flex; gap: 10px; align-items: center; flex: 1; min-width: 0; 
+}
+
+.type-select-row label { 
+  font-weight: bold; min-width: 70px; font-size: 12px; white-space: nowrap; 
+}
+
 .type-select { font-weight: bold; }
 .dark-option { background: #2b2b2b; color: #ffffff; }
 
@@ -177,34 +185,104 @@ const updateItemLoot = (index, newLootObj) => {
   border: 1px solid #ff5555; width: 24px; height: 24px; 
   border-radius: 4px; cursor: pointer; font-size: 16px; 
   display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-left: 8px;
 }
 .btn-delete:hover { background: #ff5555; color: white; }
 
-.loot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.field-row { display: flex; align-items: center; gap: 8px; }
-.full-row { grid-column: span 2; }
-.field-row label { width: 70px; font-size: 11px; opacity: 0.7; }
+/* FIX: minmax(0, 1fr) forces the grid to not expand beyond its parent width */
+.loot-grid { 
+  display: grid; 
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); 
+  gap: 8px; 
+  width: 100%;
+  box-sizing: border-box;
+}
 
-.win-input { flex: 1; padding: 4px 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: white; border-radius: 3px; font-size: 11px; }
+.field-row { 
+  display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%; box-sizing: border-box;
+}
+.full-row { grid-column: span 2; }
+.field-row label { width: 70px; font-size: 11px; opacity: 0.7; flex-shrink: 0; }
+
+.win-input { 
+  flex: 1; padding: 4px 8px; background: rgba(0,0,0,0.3); 
+  border: 1px solid var(--border-light); color: white; 
+  border-radius: 3px; font-size: 11px; box-sizing: border-box; 
+  min-width: 0; /* FIX: allows input to shrink in flex/grid containers */
+  width: 100%; 
+}
 .win-input:focus { outline: none; border-color: var(--accent-color); }
 
-.faction-section { margin-top: 5px; }
+.faction-section { margin-top: 5px; width: 100%; box-sizing: border-box; overflow: hidden; }
 
-.nested-items-section { margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1); }
+.nested-items-section { margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1); width: 100%; box-sizing: border-box;}
 .section-label { font-size: 11px; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 1px; }
 
-.items-list { display: flex; flex-direction: column; gap: 12px; }
+.items-list { display: flex; flex-direction: column; gap: 12px; width: 100%; box-sizing: border-box; }
 
 .loot-item-wrapper {
   display: flex; flex-direction: column; gap: 6px;
   background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);
-  padding: 8px; border-radius: 4px;
+  padding: 8px; border-radius: 4px; box-sizing: border-box; width: 100%;
 }
-.loot-item-controls { display: flex; justify-content: flex-start; }
-.weight-box { display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-light); }
-.weight-box label { font-size: 11px; color: var(--accent-color); font-weight: bold; }
+
+.loot-item-controls { display: flex; justify-content: flex-start; width: 100%; box-sizing: border-box; }
+.weight-box { display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-light); max-width: 100%; box-sizing: border-box; }
+.weight-box label { font-size: 11px; color: var(--accent-color); font-weight: bold; flex-shrink: 0;}
 .small-input { max-width: 80px; }
 
-.btn-add { margin-top: 10px; width: 100%; padding: 8px; background: transparent; border: 1px dashed; cursor: pointer; font-weight: bold; border-radius: 4px; transition: 0.2s; }
+.loot-item-content { width: 100%; box-sizing: border-box; }
+
+.btn-add { margin-top: 10px; width: 100%; padding: 8px; background: transparent; border: 1px dashed; cursor: pointer; font-weight: bold; border-radius: 4px; transition: 0.2s; box-sizing: border-box; }
 .btn-add:hover { background: rgba(255,255,255,0.05); }
+
+/* === MOBILE ADAPTATION (Trigger earlier at 768px due to deep nesting) === */
+@media (max-width: 768px) {
+  .loot-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  
+  .type-select-row {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .btn-delete {
+    align-self: flex-end;
+    width: 100%;
+    padding: 8px;
+    margin-left: 0;
+  }
+
+  .loot-grid {
+    grid-template-columns: minmax(0, 1fr); /* Switch to a single column */
+  }
+
+  .full-row {
+    grid-column: span 1; /* Override full-row on mobile */
+  }
+
+  .field-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .field-row label {
+    width: 100%;
+  }
+  
+  .weight-box {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .small-input {
+    max-width: 100%;
+  }
+}
 </style>
