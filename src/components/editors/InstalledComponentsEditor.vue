@@ -434,13 +434,13 @@ const previewGrid = computed(() => {
 
 .map-viewport { 
   overflow: auto; 
-  max-height: 60vh; /* Increased height for large ships */
-  padding: 30px; /* Padding around the map */
+  max-height: 60vh; 
+  padding: 30px; 
 }
 
 .map-grid-container { 
   position: relative; 
-  margin: 0 auto; /* Safe horizontal centering without top clipping */
+  margin: 0 auto; 
   background-image: linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px); 
 }
 
@@ -487,9 +487,17 @@ const previewGrid = computed(() => {
 .btn-del { background: rgba(255,50,50,0.1); color: #ff5555; border: 1px solid #ff5555; width: 24px; height: 24px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s;}
 .btn-del:hover { background: #ff5555; color: white; }
 
-.ic-row { display: flex; gap: 10px; width: 100%; box-sizing: border-box; }
-.field-box { display: flex; align-items: center; gap: 8px; flex: 1; width: 100%; background: rgba(255,255,255,0.02); padding: 6px; border: 1px solid rgba(255,255,255,0.05); border-radius: 4px;}
-.field-box label { font-size: 10px; font-weight: bold; color: var(--text-secondary); opacity: 0.8; width: 80px; text-transform: uppercase;}
+/* === RESPONSIVE ROW STYLES === */
+.ic-row { display: flex; gap: 10px; width: 100%; box-sizing: border-box; flex-wrap: wrap; }
+
+.field-box { 
+  display: flex; align-items: center; gap: 8px; 
+  flex: 1 1 calc(25% - 10px); min-width: 120px; 
+  background: rgba(255,255,255,0.02); padding: 6px; 
+  border: 1px solid rgba(255,255,255,0.05); border-radius: 4px; box-sizing: border-box;
+}
+
+.field-box label { font-size: 10px; font-weight: bold; color: var(--text-secondary); opacity: 0.8; width: 80px; text-transform: uppercase; white-space: nowrap;}
 
 .win-input { flex: 1; width: 100%; padding: 4px 6px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: white; border-radius: 4px; font-size: 11px; box-sizing: border-box; }
 .win-input:focus { border-color: var(--accent-color); outline: none; }
@@ -503,5 +511,30 @@ const previewGrid = computed(() => {
 @keyframes flash-animation {
   0% { border-color: #55aaff; box-shadow: 0 0 20px rgba(85, 170, 255, 0.8); background: rgba(85, 170, 255, 0.2); }
   100% { border-color: var(--border-light); box-shadow: none; background: rgba(0,0,0,0.2); }
+}
+
+/* === MOBILE ADAPTATION === */
+@media (max-width: 768px) {
+  .map-viewport {
+    padding: 10px; /* Less empty space around the map on mobile */
+  }
+
+  .ic-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .field-box {
+    flex-direction: column;
+    align-items: flex-start;
+    flex: 1 1 100%;
+    gap: 4px;
+    padding: 8px;
+  }
+  
+  .field-box label {
+    width: 100%;
+    margin-bottom: 2px;
+  }
 }
 </style>
