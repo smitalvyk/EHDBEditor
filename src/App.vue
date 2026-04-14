@@ -25,7 +25,7 @@ const {
   selectFile, readFileContent, saveFileContent, deleteFile, moveFile, copyFile 
 } = useFileSystem();
 
-const { clearDatabase, registerItem, printStats, registerItemFast } = useGameDatabase();
+const { clearDatabase, registerItem, printStats } = useGameDatabase();
 const { loadAllDictionaries, isLoadingDicts } = useLocalization();
 const { initNotes } = useEditorNotes(); 
 const { runChecks } = useValidator();
@@ -232,43 +232,98 @@ const countFiles = (nodes) => {
 };
 
 // ==========================================
-// ZIP FILE LOADING LOGIC
+// INDEXEDDB CORE
 // ==========================================
-const triggerZipSelect = () => {
-  if (zipFileInput.value) zipFileInput.value.click();
+const DB_NAME = 'EHDB_WebProject';
+const STORE_NAME = 'files';
+
+const initDB = () => {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'fullPath' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
 };
 
-const buildTreeFromZip = (zip) => {
-  const root = [];
-  
-  Object.keys(zip.files).forEach(relativePath => {
-    const zipEntry = zip.files[relativePath];
-    if (zipEntry.dir) return; // Skip explicit dir entries, we build from paths
-
-    const parts = relativePath.split('/');
-    let currentLevel = root;
-
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      if (i === parts.length - 1) {
-        currentLevel.push({
-          name: part,
-          kind: 'file',
-          fullPath: relativePath,
-          zipEntry: zipEntry // Store the JSZip object reference
-        });
-      } else {
-        let existingDir = currentLevel.find(d => d.name === part && d.kind === 'directory');
-        if (!existingDir) {
-          existingDir = { name: part, kind: 'directory', children: [], isOpen: false };
-          currentLevel.push(existingDir);
-        }
-        currentLevel = existingDir.children;
-      }
-    }
+const clearProjectDB = async () => {
+  const db = await initDB();
+  return new Promise(resolve => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).clear();
+    tx.oncomplete = () => resolve();
   });
-  
-  return root;
+};
+
+const saveToProjectDB = async (files) => {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    files.forEach(f => store.put(f));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+};
+
+const updateSingleFileInDB = async (fullPath, data) => {
+  const db = await initDB();
+  return new Promise(resolve => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).put({ fullPath, data });
+    tx.oncomplete = () => resolve();
+  });
+};
+
+const getFileFromDB = async (fullPath) => {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const req = tx.objectStore(STORE_NAME).get(fullPath);
+    req.onsuccess = () => resolve(req.result ? req.result.data : null);
+    req.onerror = () => reject(req.error);
+  });
+};
+
+const getAllFilesFromDB = async () => {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const req = tx.objectStore(STORE_NAME).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+};
+
+// ==========================================
+// MIME TYPE HELPER FOR IMAGES AND AUDIO
+// ==========================================
+const getMimeType = (filename) => {
+  const ext = filename.split('.').pop().toLowerCase();
+  if (ext === 'png') return 'image/png';
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  if (ext === 'gif') return 'image/gif';
+  if (ext === 'ogg' || ext === 'ogv') return 'audio/ogg';
+  if (ext === 'wav') return 'audio/wav';
+  if (ext === 'mp3') return 'audio/mpeg';
+  return 'application/octet-stream';
+};
+
+// ==========================================
+// ZIP FILE LOADING LOGIC
+// ==========================================
+const triggerZipSelect = async () => {
+  const existingFiles = await getAllFilesFromDB();
+  if (existingFiles.length > 0) {
+    const confirmOverwrite = confirm("You already have an open project. Loading a new one will erase unsaved data. Did you export your old project?");
+    if (!confirmOverwrite) return;
+  }
+  if (zipFileInput.value) zipFileInput.value.click();
 };
 
 const handleZipSelect = async (event) => {
@@ -279,21 +334,65 @@ const handleZipSelect = async (event) => {
   isZipMode.value = true;
   scanProgress.value = 0;
   filesScanned.value = 0;
-  
   rootHandle.value = { name: file.name, kind: 'archive' };
-  
+
   try {
-    currentZipArchive.value = await JSZip.loadAsync(file);
-    filesTree.value = buildTreeFromZip(currentZipArchive.value);
+    await clearProjectDB();
+    const zip = await JSZip.loadAsync(file);
     
+    const entries = Object.keys(zip.files).filter(p => !zip.files[p].dir);
+    const dbFiles = [];
+    const root = [];
+    totalFilesToScan.value = entries.length;
+
+    for (let i = 0; i < entries.length; i++) {
+      const relativePath = entries[i];
+      const zipEntry = zip.files[relativePath];
+      
+      const blob = await zipEntry.async('blob');
+      dbFiles.push({ fullPath: relativePath, data: blob });
+
+      const parts = relativePath.split('/');
+      let currentLevel = root;
+      for (let j = 0; j < parts.length; j++) {
+        const part = parts[j];
+        if (j === parts.length - 1) {
+          currentLevel.push({ 
+            name: part, 
+            kind: 'file', 
+            fullPath: relativePath,
+            // Фейковый Handle для компонентов предпросмотра
+            handle: {
+              kind: 'file',
+              name: part,
+              getFile: async () => {
+                const fileBlob = await getFileFromDB(relativePath);
+                return new File([fileBlob], part, { type: getMimeType(part) });
+              }
+            }
+          });
+        } else {
+          let existingDir = currentLevel.find(d => d.name === part && d.kind === 'directory');
+          if (!existingDir) {
+            existingDir = { name: part, kind: 'directory', children: [], isOpen: false };
+            currentLevel.push(existingDir);
+          }
+          currentLevel = existingDir.children;
+        }
+      }
+      
+      filesScanned.value++;
+      scanProgress.value = Math.floor((filesScanned.value / totalFilesToScan.value) * 100);
+    }
+    
+    await saveToProjectDB(dbFiles);
+    filesTree.value = root;
     searchQuery.value = '';
-    filteredFilesTree.value = filesTree.value;
-    totalFilesToScan.value = countFiles(filesTree.value);
+    filteredFilesTree.value = root;
     clearDatabase();
     
-    // Scan contents from ZIP memory
     setTimeout(async () => {
-      await scanAllFiles(filesTree.value, '');
+      await scanAllFiles(root, '');
       await loadAllDictionaries();
       isScanning.value = false;
       printStats();
@@ -305,15 +404,21 @@ const handleZipSelect = async (event) => {
     alert("Failed to read the ZIP file.");
   }
   
-  // Reset input so the same file can be selected again if needed
   event.target.value = '';
 };
 
 const exportZip = async () => {
-  if (!isZipMode.value || !currentZipArchive.value) return;
+  if (!isZipMode.value) return;
   
   try {
-    const blob = await currentZipArchive.value.generateAsync({ type: 'blob' });
+    const zip = new JSZip();
+    const allFiles = await getAllFilesFromDB();
+    
+    allFiles.forEach(file => {
+      zip.file(file.fullPath, file.data);
+    });
+
+    const blob = await zip.generateAsync({ type: 'blob' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -336,10 +441,15 @@ const handleOpenFolder = async () => {
     await loadProjectsList();
     isProjectModalOpen.value = true;
   } else {
+    if (isZipMode.value) {
+      const confirmOverwrite = confirm("You have a ZIP project open in memory. Switching to folder mode will close it. Did you export your ZIP?");
+      if (!confirmOverwrite) return;
+    }
+
     try {
       await openDirectory();
       isZipMode.value = false;
-      currentZipArchive.value = null;
+      await clearProjectDB();
       startIndexing();
     } catch (e) {
       console.warn("Folder selection aborted or failed", e);
@@ -351,7 +461,6 @@ const loadAndroidProject = async (projectName) => {
   isProjectModalOpen.value = false;
   isScanning.value = true;
   isZipMode.value = false;
-  currentZipArchive.value = null;
   scanProgress.value = 0;
   filesScanned.value = 0;
   await openNativeProject(projectName);
@@ -393,8 +502,9 @@ const scanAllFiles = async (nodes, pathPrefix = '') => {
     } else if (node.kind === 'file' && node.name.toLowerCase().endsWith('.json')) {
       try {
         let text = '';
-        if (isZipMode.value && node.zipEntry) {
-          text = await node.zipEntry.async('string');
+        if (isZipMode.value) {
+          const blob = await getFileFromDB(currentPath);
+          if (blob) text = await blob.text();
         } else if (node.handle) {
           text = await readFileContent(node.handle); 
         }
@@ -405,9 +515,11 @@ const scanAllFiles = async (nodes, pathPrefix = '') => {
       } catch (e) { 
         console.error("Indexing error:", node.name, e); 
       } finally {
-        filesScanned.value++;
-        if (totalFilesToScan.value > 0) {
-          scanProgress.value = Math.floor((filesScanned.value / totalFilesToScan.value) * 100);
+        if (!isZipMode.value) {
+          filesScanned.value++;
+          if (totalFilesToScan.value > 0) {
+            scanProgress.value = Math.floor((filesScanned.value / totalFilesToScan.value) * 100);
+          }
         }
       }
     }
@@ -416,12 +528,11 @@ const scanAllFiles = async (nodes, pathPrefix = '') => {
 
 const handleSave = async (newContent) => {
   if (selectedFile.value) {
-    if (isZipMode.value && currentZipArchive.value) {
-      // Update file in RAM (inside JSZip object)
-      currentZipArchive.value.file(selectedFile.value.fullPath, newContent);
+    if (isZipMode.value) {
+      const blob = new Blob([newContent], { type: 'application/json;charset=utf-8' });
+      await updateSingleFileInDB(selectedFile.value.fullPath, blob);
     } 
     else if (selectedFile.value.handle) {
-      // Save physical file on PC/Android
       await saveFileContent(selectedFile.value.handle, newContent);
     }
   }
@@ -435,33 +546,45 @@ const handleSave = async (newContent) => {
   isVisualOpen.value = false;
 };
 
+// Media RAM cleaner
+let currentMediaUrl = null;
+
 const handleSelectFile = async (fileNode) => {
   selectedFile.value = fileNode;
   isSidebarOpen.value = false; 
   
   try {
-    const nameLower = fileNode.name.toLowerCase();
+    if (currentMediaUrl) {
+      URL.revokeObjectURL(currentMediaUrl);
+      currentMediaUrl = null;
+    }
 
-    // Prevent reading media as text
-    if (nameLower.endsWith('.ogg') || nameLower.endsWith('.ogv') || nameLower.endsWith('.wav') || nameLower.endsWith('.mp3')) {
-      if (isZipMode.value && fileNode.zipEntry) {
-        const blob = await fileNode.zipEntry.async('blob');
-        selectedContent.value = URL.createObjectURL(blob);
-        fileType.value = 'audio';
+    const nameLower = fileNode.name.toLowerCase();
+    const isAudio = nameLower.endsWith('.ogg') || nameLower.endsWith('.ogv') || nameLower.endsWith('.wav') || nameLower.endsWith('.mp3');
+    const isImage = nameLower.endsWith('.png') || nameLower.endsWith('.jpg') || nameLower.endsWith('.jpeg');
+
+    if (isAudio || isImage) {
+      if (isZipMode.value) {
+        const blob = await getFileFromDB(fileNode.fullPath);
+        if (blob) {
+            currentMediaUrl = URL.createObjectURL(blob);
+            selectedContent.value = currentMediaUrl;
+            fileType.value = isImage ? 'image' : 'audio';
+        }
       } else {
-         selectFile(fileNode); // Use default composable logic
+         if (isImage) {
+             fileType.value = 'image';
+         } else {
+             selectFile(fileNode); 
+             fileType.value = 'audio';
+         }
       }
       return; 
     }
 
-    if (nameLower.endsWith('.png') || nameLower.endsWith('.jpg') || nameLower.endsWith('.jpeg')) {
-      fileType.value = 'image';
-      return;
-    }
-
-    // Default logic for JSON / text files
-    if (isZipMode.value && fileNode.zipEntry) {
-      selectedContent.value = await fileNode.zipEntry.async('string');
+    if (isZipMode.value) {
+      const blob = await getFileFromDB(fileNode.fullPath);
+      if (blob) selectedContent.value = await blob.text();
     } else {
       selectedContent.value = await readFileContent(fileNode.handle);
     }
@@ -476,6 +599,69 @@ const handleSelectFile = async (fileNode) => {
 };
 
 // ==========================================
+// APP BOOTSTRAP (RELOAD CACHE)
+// ==========================================
+onMounted(async () => { 
+  updateThemeClass(); 
+  setupConsoleInterceptor();
+
+  try {
+    const existingFiles = await getAllFilesFromDB();
+    if (existingFiles.length > 0) {
+      isZipMode.value = true;
+      rootHandle.value = { name: 'Saved Web Project', kind: 'archive' };
+      
+      const root = [];
+      existingFiles.forEach(file => {
+        const parts = file.fullPath.split('/');
+        let currentLevel = root;
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
+          if (i === parts.length - 1) {
+            currentLevel.push({ 
+              name: part, 
+              kind: 'file', 
+              fullPath: file.fullPath,
+              // Фейковый Handle для восстановления дерева из кэша
+              handle: {
+                kind: 'file',
+                name: part,
+                getFile: async () => {
+                  const fileBlob = await getFileFromDB(file.fullPath);
+                  return new File([fileBlob], part, { type: getMimeType(part) });
+                }
+              }
+            });
+          } else {
+            let existingDir = currentLevel.find(d => d.name === part && d.kind === 'directory');
+            if (!existingDir) {
+              existingDir = { name: part, kind: 'directory', children: [], isOpen: false };
+              currentLevel.push(existingDir);
+            }
+            currentLevel = existingDir.children;
+          }
+        }
+      });
+      
+      filesTree.value = root;
+      filteredFilesTree.value = root;
+      totalFilesToScan.value = countFiles(root);
+      isScanning.value = true;
+      clearDatabase();
+      
+      setTimeout(async () => {
+        await scanAllFiles(root, '');
+        await loadAllDictionaries();
+        isScanning.value = false;
+        printStats();
+      }, 100);
+    }
+  } catch (e) {
+    console.error("Failed to load cached project:", e);
+  }
+});
+
+// ==========================================
 // SEARCH
 // ==========================================
 const checkFileMatch = async (node, lowerQuery) => {
@@ -485,9 +671,12 @@ const checkFileMatch = async (node, lowerQuery) => {
     if (['json', 'xml', 'txt', 'js', 'md'].includes(ext)) {
       try {
         let content = '';
-        if (isZipMode.value && node.zipEntry) content = await node.zipEntry.async('string');
-        else if (node.handle) content = await readFileContent(node.handle);
-        
+        if (isZipMode.value) {
+          const blob = await getFileFromDB(node.fullPath);
+          if (blob) content = await blob.text();
+        } else if (node.handle) {
+          content = await readFileContent(node.handle);
+        }
         if (content && content.toLowerCase().includes(lowerQuery)) return true;
       } catch (e) {}
     }
@@ -538,7 +727,7 @@ const updateThemeClass = () => document.documentElement.classList.toggle('dark-t
 const toggleSidebar = () => { isSidebarOpen.value = !isSidebarOpen.value; };
 
 // ==========================================
-// DEVELOPER CONSOLE (LONG PRESS ON SETTINGS)
+// DEVELOPER CONSOLE
 // ==========================================
 const isConsoleOpen = ref(false);
 const appLogs = ref([]);
@@ -571,11 +760,6 @@ const setupConsoleInterceptor = () => {
   console.warn = function() { addLog('warn', arguments); originalWarn.apply(console, arguments); };
   console.error = function() { addLog('error', arguments); originalError.apply(console, arguments); };
 };
-
-onMounted(() => { 
-  updateThemeClass(); 
-  setupConsoleInterceptor();
-});
 </script>
 
 <template>
@@ -589,16 +773,16 @@ onMounted(() => {
       
       <div class="actions">
         
-        <button @click="handleOpenFolder" class="btn-primary mobile-hidden" :disabled="isScanning" v-if="!isZipMode">
-          <span v-if="isScanning">
+        <button @click="handleOpenFolder" class="btn-primary mobile-hidden" :disabled="isScanning" v-if="!isNative">
+          <span v-if="isScanning && !isZipMode">
             {{ isLoadingDicts ? '📖 Dictionaries...' : `⏳ Scanning... ${scanProgress}%` }}
           </span>
           <span v-else>📂 Open Folder</span>
         </button>
 
-        <button @click="triggerZipSelect" class="btn-primary btn-zip" :disabled="isScanning" v-if="!isZipMode">
-           <span v-if="isScanning && !isLoadingDicts">⏳ Unzipping... {{ scanProgress }}%</span>
-           <span v-else>📦 Open ZIP</span>
+        <button @click="triggerZipSelect" class="btn-primary btn-zip" :disabled="isScanning">
+           <span v-if="isScanning && isZipMode && !isLoadingDicts">⏳ Extracting... {{ scanProgress }}%</span>
+           <span v-else>📦 {{ isZipMode ? 'New ZIP' : 'Open ZIP' }}</span>
         </button>
         
         <button @click="exportZip" class="btn-primary btn-export-zip" v-if="isZipMode">
