@@ -12,6 +12,9 @@ import VisualEditorModal from './components/VisualEditorModal.vue';
 import XmlLocalizationEditor from './components/XmlLocalizationEditor.vue';
 import { useValidator } from './composables/useValidator';
 
+// ZIP LIBRARY
+import JSZip from 'jszip';
+
 // ADDED FOR ANDROID (CAPACITOR)
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
@@ -22,7 +25,7 @@ const {
   selectFile, readFileContent, saveFileContent, deleteFile, moveFile, copyFile 
 } = useFileSystem();
 
-const { clearDatabase, registerItem, printStats } = useGameDatabase();
+const { clearDatabase, registerItem, printStats, registerItemFast } = useGameDatabase();
 const { loadAllDictionaries, isLoadingDicts } = useLocalization();
 const { initNotes } = useEditorNotes(); 
 const { runChecks } = useValidator();
@@ -34,6 +37,11 @@ const isScanning = ref(false);
 const isSidebarOpen = ref(false); 
 const isProjectModalOpen = ref(false);
 const newProjectName = ref('');
+
+// === ZIP STATE ===
+const isZipMode = ref(false);
+const currentZipArchive = shallowRef(null);
+const zipFileInput = ref(null);
 
 // === SCANNING PROGRESS ===
 const scanProgress = ref(0);
@@ -53,8 +61,8 @@ const selectedTypeFilter = ref('All');
 
 const confirmAction = ref({ show: false, title: '', message: '', action: null });
 
-const totalErrorsCount = computed(() => validationErrors.value.filter(e => e.message.includes('❌')).length);
-const totalWarningsCount = computed(() => validationErrors.value.filter(e => e.message.includes('⚠️')).length);
+const totalErrorsCount = computed(() => validationErrors.value.filter(e => e.message.includes('ERROR')).length);
+const totalWarningsCount = computed(() => validationErrors.value.filter(e => e.message.includes('WARNING')).length);
 
 // TYPE MAP
 const typeMap = {
@@ -90,8 +98,8 @@ const availableErrorTypes = computed(() => {
 
 const filteredValidationErrors = computed(() => {
   return validationErrors.value.filter(err => {
-    const isWarning = err.message.includes('⚠️');
-    const isError = err.message.includes('❌');
+    const isWarning = err.message.includes('WARNING');
+    const isError = err.message.includes('ERROR');
     if (isWarning && !showWarningsFilter.value) return false;
     if (isError && !showErrorsFilter.value) return false;
     if (selectedTypeFilter.value !== 'All' && String(err.itemType) !== String(selectedTypeFilter.value)) return false;
@@ -150,7 +158,7 @@ const getUniqueNodesFromErrors = () => {
     if (!uniquePaths.has(err.path)) {
       uniquePaths.add(err.path);
       const node = findNodeByPath(filesTree.value, err.path);
-      if (node && node.handle) uniqueNodes.push({ node, itemType: getTypeName(err.itemType) });
+      if (node) uniqueNodes.push({ node, itemType: getTypeName(err.itemType) });
     }
   }
   return uniqueNodes;
@@ -187,15 +195,15 @@ const copyAllCorrupted = async (folderName) => {
 
 const deleteSingle = async (err) => {
   const node = findNodeByPath(filesTree.value, err.path);
-  if (node && node.handle && await deleteFile(node.handle)) alert("File successfully deleted!");
+  if (node && await deleteFile(node.handle)) alert("File successfully deleted!");
 };
 const moveSingle = async (err, folderName) => {
   const node = findNodeByPath(filesTree.value, err.path);
-  if (node && node.handle && await moveFile(node.handle, folderName, getTypeName(err.itemType))) alert("File successfully moved!");
+  if (node && await moveFile(node.handle, folderName, getTypeName(err.itemType))) alert("File successfully moved!");
 };
 const copySingle = async (err, folderName) => {
   const node = findNodeByPath(filesTree.value, err.path);
-  if (node && node.handle && await copyFile(node.handle, folderName, getTypeName(err.itemType))) alert("File successfully copied!");
+  if (node && await copyFile(node.handle, folderName, getTypeName(err.itemType))) alert("File successfully copied!");
 };
 
 // --- SETTINGS STORAGE ---
@@ -214,11 +222,6 @@ const isSearching = ref(false);
 const filteredFilesTree = ref([]);  
 let searchTimeout = null;
 
-// ==========================================
-// MOBILE FILE LOADING LOGIC
-// ==========================================
-const mobileFolderInput = ref(null);
-
 const countFiles = (nodes) => {
   let count = 0;
   for (const node of nodes) {
@@ -228,28 +231,31 @@ const countFiles = (nodes) => {
   return count;
 };
 
-const handleMobileFolderSelect = (event) => {
-  const files = event.target.files;
-  if (!files || files.length === 0) return;
+// ==========================================
+// ZIP FILE LOADING LOGIC
+// ==========================================
+const triggerZipSelect = () => {
+  if (zipFileInput.value) zipFileInput.value.click();
+};
 
-  const newTree = [];
-  const rootName = files[0].webkitRelativePath.split('/')[0] || 'Mobile Folder';
-  rootHandle.value = { name: rootName, kind: 'directory' }; 
+const buildTreeFromZip = (zip) => {
+  const root = [];
+  
+  Object.keys(zip.files).forEach(relativePath => {
+    const zipEntry = zip.files[relativePath];
+    if (zipEntry.dir) return; // Skip explicit dir entries, we build from paths
 
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const parts = file.webkitRelativePath.split('/');
-    let currentLevel = newTree;
-    
-    for (let j = 1; j < parts.length; j++) {
-      const part = parts[j];
-      if (j === parts.length - 1) {
+    const parts = relativePath.split('/');
+    let currentLevel = root;
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      if (i === parts.length - 1) {
         currentLevel.push({
           name: part,
           kind: 'file',
-          fullPath: file.webkitRelativePath.substring(file.webkitRelativePath.indexOf('/') + 1),
-          fileObj: file, // RAM file copy
-          handle: { kind: 'file', name: part, getFile: async () => file } // Fake Handle for FilePreview
+          fullPath: relativePath,
+          zipEntry: zipEntry // Store the JSZip object reference
         });
       } else {
         let existingDir = currentLevel.find(d => d.name === part && d.kind === 'directory');
@@ -260,37 +266,83 @@ const handleMobileFolderSelect = (event) => {
         currentLevel = existingDir.children;
       }
     }
-  }
+  });
   
-  filesTree.value = newTree;
-  searchQuery.value = '';
-  filteredFilesTree.value = filesTree.value;
-  isScanning.value = true;
-  scanProgress.value = 0;
-  filesScanned.value = 0;
-  totalFilesToScan.value = countFiles(filesTree.value);
-  clearDatabase();
-  
-  setTimeout(async () => {
-    await scanAllFiles(filesTree.value, '');
-    await loadAllDictionaries();
-    isScanning.value = false;
-    printStats();
-  }, 100);
+  return root;
 };
 
+const handleZipSelect = async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  isScanning.value = true;
+  isZipMode.value = true;
+  scanProgress.value = 0;
+  filesScanned.value = 0;
+  
+  rootHandle.value = { name: file.name, kind: 'archive' };
+  
+  try {
+    currentZipArchive.value = await JSZip.loadAsync(file);
+    filesTree.value = buildTreeFromZip(currentZipArchive.value);
+    
+    searchQuery.value = '';
+    filteredFilesTree.value = filesTree.value;
+    totalFilesToScan.value = countFiles(filesTree.value);
+    clearDatabase();
+    
+    // Scan contents from ZIP memory
+    setTimeout(async () => {
+      await scanAllFiles(filesTree.value, '');
+      await loadAllDictionaries();
+      isScanning.value = false;
+      printStats();
+    }, 100);
+    
+  } catch (e) {
+    console.error("Failed to load ZIP:", e);
+    isScanning.value = false;
+    alert("Failed to read the ZIP file.");
+  }
+  
+  // Reset input so the same file can be selected again if needed
+  event.target.value = '';
+};
+
+const exportZip = async () => {
+  if (!isZipMode.value || !currentZipArchive.value) return;
+  
+  try {
+    const blob = await currentZipArchive.value.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = rootHandle.value.name.replace('.zip', '_modded.zip');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error("Export ZIP error:", e);
+    alert("Failed to export ZIP file.");
+  }
+};
+
+// ==========================================
+// DIRECTORY LOADING LOGIC (PC)
+// ==========================================
 const handleOpenFolder = async () => {
   if (isNative) {
-    // WE ARE ON ANDROID
     await loadProjectsList();
     isProjectModalOpen.value = true;
   } else {
-    // WE ARE ON PC
     try {
       await openDirectory();
+      isZipMode.value = false;
+      currentZipArchive.value = null;
       startIndexing();
     } catch (e) {
-      if (e.name !== 'AbortError') mobileFolderInput.value.click(); // Fallback
+      console.warn("Folder selection aborted or failed", e);
     }
   }
 };
@@ -298,6 +350,8 @@ const handleOpenFolder = async () => {
 const loadAndroidProject = async (projectName) => {
   isProjectModalOpen.value = false;
   isScanning.value = true;
+  isZipMode.value = false;
+  currentZipArchive.value = null;
   scanProgress.value = 0;
   filesScanned.value = 0;
   await openNativeProject(projectName);
@@ -320,7 +374,7 @@ const startIndexing = () => {
     totalFilesToScan.value = countFiles(filesTree.value);
     clearDatabase();
     setTimeout(async () => {
-      if (rootHandle.value) await initNotes(rootHandle.value);
+      if (rootHandle.value && !isZipMode.value) await initNotes(rootHandle.value);
       await scanAllFiles(filesTree.value, '');
       await loadAllDictionaries();
       isScanning.value = false;
@@ -333,15 +387,21 @@ const scanAllFiles = async (nodes, pathPrefix = '') => {
   for (const node of nodes) {
     const currentPath = pathPrefix ? `${pathPrefix}/${node.name}` : node.name;
     node.fullPath = currentPath;
+    
     if (node.kind === 'directory' && node.children) {
       await scanAllFiles(node.children, currentPath);
     } else if (node.kind === 'file' && node.name.toLowerCase().endsWith('.json')) {
       try {
         let text = '';
-        if (node.fileObj) text = await node.fileObj.text(); 
-        else if (node.handle) text = await readFileContent(node.handle); 
+        if (isZipMode.value && node.zipEntry) {
+          text = await node.zipEntry.async('string');
+        } else if (node.handle) {
+          text = await readFileContent(node.handle); 
+        }
         
-        if (text) registerItem(text, node.name, currentPath);
+        if (text) {
+           registerItem(text, node.name, currentPath);
+        }
       } catch (e) { 
         console.error("Indexing error:", node.name, e); 
       } finally {
@@ -356,21 +416,12 @@ const scanAllFiles = async (nodes, pathPrefix = '') => {
 
 const handleSave = async (newContent) => {
   if (selectedFile.value) {
-    if (selectedFile.value.fileObj) {
-      const blob = new Blob([newContent], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = selectedFile.value.name; 
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      selectedFile.value.fileObj = new File([blob], selectedFile.value.name, { type: 'text/plain' });
-      selectedFile.value.handle = { kind: 'file', name: selectedFile.value.name, getFile: async () => selectedFile.value.fileObj };
+    if (isZipMode.value && currentZipArchive.value) {
+      // Update file in RAM (inside JSZip object)
+      currentZipArchive.value.file(selectedFile.value.fullPath, newContent);
     } 
     else if (selectedFile.value.handle) {
+      // Save physical file on PC/Android
       await saveFileContent(selectedFile.value.handle, newContent);
     }
   }
@@ -384,9 +435,44 @@ const handleSave = async (newContent) => {
   isVisualOpen.value = false;
 };
 
-const handleSelectFile = async (file) => {
-  selectFile(file); 
+const handleSelectFile = async (fileNode) => {
+  selectedFile.value = fileNode;
   isSidebarOpen.value = false; 
+  
+  try {
+    const nameLower = fileNode.name.toLowerCase();
+
+    // Prevent reading media as text
+    if (nameLower.endsWith('.ogg') || nameLower.endsWith('.ogv') || nameLower.endsWith('.wav') || nameLower.endsWith('.mp3')) {
+      if (isZipMode.value && fileNode.zipEntry) {
+        const blob = await fileNode.zipEntry.async('blob');
+        selectedContent.value = URL.createObjectURL(blob);
+        fileType.value = 'audio';
+      } else {
+         selectFile(fileNode); // Use default composable logic
+      }
+      return; 
+    }
+
+    if (nameLower.endsWith('.png') || nameLower.endsWith('.jpg') || nameLower.endsWith('.jpeg')) {
+      fileType.value = 'image';
+      return;
+    }
+
+    // Default logic for JSON / text files
+    if (isZipMode.value && fileNode.zipEntry) {
+      selectedContent.value = await fileNode.zipEntry.async('string');
+    } else {
+      selectedContent.value = await readFileContent(fileNode.handle);
+    }
+    
+    const match = selectedContent.value.match(/"ItemType"\s*:\s*(\d+)/);
+    fileType.value = match ? match[1] : '';
+  } catch (error) {
+    console.error("Error reading file:", error);
+    selectedContent.value = "Error reading file content.";
+    fileType.value = '';
+  }
 };
 
 // ==========================================
@@ -399,8 +485,9 @@ const checkFileMatch = async (node, lowerQuery) => {
     if (['json', 'xml', 'txt', 'js', 'md'].includes(ext)) {
       try {
         let content = '';
-        if (node.fileObj) content = await node.fileObj.text();
+        if (isZipMode.value && node.zipEntry) content = await node.zipEntry.async('string');
         else if (node.handle) content = await readFileContent(node.handle);
+        
         if (content && content.toLowerCase().includes(lowerQuery)) return true;
       } catch (e) {}
     }
@@ -462,7 +549,7 @@ const startLongPress = () => {
   longPressTimer = setTimeout(() => {
     isConsoleOpen.value = true;
     isSettingsOpen.value = false;
-  }, 3000); // 3 seconds hold to open console
+  }, 3000); 
 };
 
 const cancelLongPress = () => {
@@ -477,7 +564,7 @@ const setupConsoleInterceptor = () => {
   const addLog = (type, args) => {
     const message = Array.from(args).map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
     appLogs.value.push({ type, message, time: new Date().toLocaleTimeString() });
-    if (appLogs.value.length > 200) appLogs.value.shift(); // Keep only last 200 logs
+    if (appLogs.value.length > 200) appLogs.value.shift(); 
   };
 
   console.log = function() { addLog('log', arguments); originalLog.apply(console, arguments); };
@@ -494,19 +581,30 @@ onMounted(() => {
 <template>
   <div class="window-container">
     
-    <input type="file" webkitdirectory directory multiple ref="mobileFolderInput" style="display: none" @change="handleMobileFolderSelect" />
+    <input type="file" accept=".zip" ref="zipFileInput" style="display: none" @change="handleZipSelect" />
 
     <header class="toolbar">
       <button class="btn-icon mobile-menu-btn" @click="toggleSidebar">☰</button>
       <div class="window-title">EHDBEditor</div>
       
       <div class="actions">
-        <button @click="handleOpenFolder" class="btn-primary" :disabled="isScanning">
+        
+        <button @click="handleOpenFolder" class="btn-primary mobile-hidden" :disabled="isScanning" v-if="!isZipMode">
           <span v-if="isScanning">
             {{ isLoadingDicts ? '📖 Dictionaries...' : `⏳ Scanning... ${scanProgress}%` }}
           </span>
           <span v-else>📂 Open Folder</span>
         </button>
+
+        <button @click="triggerZipSelect" class="btn-primary btn-zip" :disabled="isScanning" v-if="!isZipMode">
+           <span v-if="isScanning && !isLoadingDicts">⏳ Unzipping... {{ scanProgress }}%</span>
+           <span v-else>📦 Open ZIP</span>
+        </button>
+        
+        <button @click="exportZip" class="btn-primary btn-export-zip" v-if="isZipMode">
+           💾 Export ZIP
+        </button>
+
         <button @click="openValidatorWindow" class="btn-icon" title="Diagnostics">🩺</button>
         
         <button 
@@ -523,7 +621,7 @@ onMounted(() => {
       </div>
 
       <div class="path-breadcumbs mobile-hidden" v-if="rootHandle">
-        {{ rootHandle.name }} <span v-if="selectedFile"> / {{ selectedFile.name }}</span>
+        <span v-if="isZipMode">📦 </span> {{ rootHandle.name }} <span v-if="selectedFile"> / {{ selectedFile.name }}</span>
       </div>
     </header>
 
@@ -716,7 +814,7 @@ onMounted(() => {
                    ✅ All filtered items are hidden or no errors found.
                 </div>
                 
-                <div v-for="(err, i) in displayedErrors" :key="i" class="error-item" :class="{ 'is-warning': err.message.includes('⚠️') }">
+                <div v-for="(err, i) in displayedErrors" :key="i" class="error-item" :class="{ 'is-warning': err.message.includes('WARNING') }">
                    <div class="err-header">
                      <span class="err-file">
                         File: {{ err.path }} <span class="err-meta">(ID: {{ err.itemId }} | Type: {{ getTypeName(err.itemType) }})</span>
@@ -793,6 +891,12 @@ body { margin: 0; font-family: 'Segoe UI', sans-serif; background: var(--app-bg)
 .btn-primary:disabled { opacity: 0.7; cursor: wait; }
 .btn-icon { background: transparent; border: none; cursor: pointer; font-size: 18px; padding: 6px; border-radius: var(--radius-sm); color: var(--text-primary); user-select: none; -webkit-user-select: none;}
 .btn-icon:hover { background: var(--item-hover); }
+
+/* ZIP Buttons Styling */
+.btn-zip { background: #3b82f6; color: white; border-color: #2563eb; }
+.btn-zip:hover:not(:disabled) { background: #2563eb; }
+.btn-export-zip { background: #10b981; color: white; border-color: #059669; }
+.btn-export-zip:hover:not(:disabled) { background: #059669; }
 
 .path-breadcumbs { font-size: 12px; color: var(--text-secondary); border-left: 1px solid var(--border-light); padding-left: 10px; margin-left: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -922,7 +1026,7 @@ input:checked + .warning-slider { background-color: #ffaa00 !important; }
 
 @media (max-width: 768px) {
   .mobile-menu-btn { display: block; } 
-  .mobile-hidden { display: none; }    
+  .mobile-hidden { display: none !important; }    
   .window-title { display: none; }      
   .main-area { padding: 0; }            
   .content-view { border-radius: 0; border: none; border-top: 1px solid var(--border-light); }
