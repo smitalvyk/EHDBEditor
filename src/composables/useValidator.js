@@ -3,7 +3,7 @@ import { useGameDatabase } from './useGameDatabase';
 export function useValidator() {
   const { getItemsByType } = useGameDatabase();
 
-  const runChecks = () => {
+  const runChecks = (config = { checkMissingRefs: true, checkClamps: true, checkAiLogic: true }) => {
     const errors = [];
     
     const addError = (item, msg) => {
@@ -22,15 +22,13 @@ export function useValidator() {
     };
 
     const checkClamp = (item, obj, field, min, max, contextName = '') => {
+      if (!config.checkClamps) return;
       if (obj && obj[field] !== undefined && (obj[field] < min || obj[field] > max)) {
         addError(item, `⚠️ Clamp Warning: ${contextName ? contextName+'.' : ''}'${field}' (${obj[field]}) out of bounds [${min} ... ${max}]. Game will clamp it!`);
       }
     };
 
-    // =========================================================
-    // GLOBAL SCANNER BY YOUR type_map
-    // =========================================================
-    // Includes absolutely all types, including Settings (100-118)
+    // Global scanner configuration
     const validTypes = [
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 
       25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 
@@ -45,17 +43,17 @@ export function useValidator() {
        }
     });
 
-    const componentsList = getItemsByType(1) || []; // 1: Component
-    const ships = getItemsByType(6) || [];          // 6: Ship
-    const satellites = getItemsByType(7) || [];     // 7: Satellite
-    const compStatsList = getItemsByType(11) || []; // 11: ComponentStats
+    const componentsList = getItemsByType(1) || [];
+    const ships = getItemsByType(6) || [];
+    const satellites = getItemsByType(7) || [];
+    const compStatsList = getItemsByType(11) || [];
     
     allItems.forEach(item => {
        const data = item.data;
        if (!data) return;
 
-       // --- Type 8: ShipBuild ---
-       if (item.typeId === 8) {
+       // Type 8: ShipBuild
+       if (item.typeId === 8 && config.checkMissingRefs) {
           const shipExists = ships.some(s => s.id === data.ShipId);
           if (!data.ShipId || !shipExists) {
             addError(item, `❌ Fatal: ObjectTemplate.Ship cannot be null or invalid. (ShipId: ${data.ShipId || '0'})`);
@@ -65,35 +63,43 @@ export function useValidator() {
                 if (!comp.ComponentId || comp.ComponentId === 0 || !componentsList.some(c => c.id === comp.ComponentId)) {
                    addError(item, `❌ Fatal: InstalledComponent[${cIdx}] (ID: ${comp.ComponentId}) not found in Components!`);
                 }
-                checkClamp(item, comp, 'X', -32768, 32767, `Component[${cIdx}]`);
-                checkClamp(item, comp, 'Y', -32768, 32767, `Component[${cIdx}]`);
-                checkClamp(item, comp, 'BarrelId', 0, 255, `Component[${cIdx}]`);
-                checkClamp(item, comp, 'Behaviour', 0, 10, `Component[${cIdx}]`);
-                checkClamp(item, comp, 'KeyBinding', -10, 10, `Component[${cIdx}]`);
              });
           }
        }
 
-       // --- Type 9: SatelliteBuild ---
-       if (item.typeId === 9) {
+       // Clamps for ShipBuild
+       if (item.typeId === 8 && Array.isArray(data.Components)) {
+          data.Components.forEach((comp, cIdx) => {
+             checkClamp(item, comp, 'X', -32768, 32767, `Component[${cIdx}]`);
+             checkClamp(item, comp, 'Y', -32768, 32767, `Component[${cIdx}]`);
+             checkClamp(item, comp, 'BarrelId', 0, 255, `Component[${cIdx}]`);
+             checkClamp(item, comp, 'Behaviour', 0, 10, `Component[${cIdx}]`);
+             checkClamp(item, comp, 'KeyBinding', -10, 10, `Component[${cIdx}]`);
+          });
+       }
+
+       // Type 9: SatelliteBuild
+       if (item.typeId === 9 && config.checkMissingRefs) {
           const satExists = satellites.some(s => s.id === data.SatelliteId);
           if (!data.SatelliteId || !satExists) {
             addError(item, `❌ Fatal: ObjectTemplate.Satellite cannot be null or invalid. (SatelliteId: ${data.SatelliteId || '0'})`);
           }
        }
 
-       // --- Type 1: Component ---
+       // Type 1: Component
        if (item.typeId === 1) {
-           if (!data.ComponentStatsId || data.ComponentStatsId === 0) {
-               addError(item, `❌ Fatal: Component must have a valid ComponentStatsId!`);
-           } else if (!compStatsList.some(s => s.id === data.ComponentStatsId)) {
-               addError(item, `❌ Fatal: ComponentStatsId (${data.ComponentStatsId}) not found in database (Type 11)!`);
+           if (config.checkMissingRefs) {
+               if (!data.ComponentStatsId || data.ComponentStatsId === 0) {
+                   addError(item, `❌ Fatal: Component must have a valid ComponentStatsId!`);
+               } else if (!compStatsList.some(s => s.id === data.ComponentStatsId)) {
+                   addError(item, `❌ Fatal: ComponentStatsId (${data.ComponentStatsId}) not found in database (Type 11)!`);
+               }
            }
            checkClamp(item, data, 'Level', 0, 2147483647, 'Component');
        }
 
-       // --- Type 10: Technology ---
-       if (item.typeId === 10) {
+       // Type 10: Technology
+       if (item.typeId === 10 && config.checkMissingRefs) {
           if (data.Type < 0 || data.Type > 2) {
              addError(item, `❌ Fatal: Technology has invalid Type (${data.Type}). Game will crash!`);
           } else if (data.Type === 1) { 
@@ -111,8 +117,7 @@ export function useValidator() {
           }
        }
 
-       // --- OTHER CHECKS AND LIMITS (Clamp) ---
-       
+       // Clamps and general limits
        if (Array.isArray(data.Engines)) {
           data.Engines.forEach((engine, eIdx) => checkClamp(item, engine, 'Size', 0, 1, `Engine[${eIdx}]`));
        }
@@ -138,16 +143,16 @@ export function useValidator() {
           checkClamp(item, data.Features, 'EnergyResistance', -100, 100, 'Features');
           checkClamp(item, data.Features, 'KineticResistance', -100, 100, 'Features');
           checkClamp(item, data.Features, 'HeatResistance', -100, 100, 'Features');
-          checkClamp(item, data.Features, 'ShipWeightBonus', -1, 10, 'Features');
-          checkClamp(item, data.Features, 'EquipmentWeightBonus', -1, 10, 'Features');
-          checkClamp(item, data.Features, 'VelocityBonus', -1, 10, 'Features');
-          checkClamp(item, data.Features, 'TurnRateBonus', -1, 10, 'Features');
-          checkClamp(item, data.Features, 'ArmorBonus', -1, 10, 'Features');
-          checkClamp(item, data.Features, 'ShieldBonus', -1, 10, 'Features');
-          checkClamp(item, data.Features, 'EnergyBonus', -1, 10, 'Features');
-          checkClamp(item, data.Features, 'DroneBuildSpeedBonus', -1, 10, 'Features');
-          checkClamp(item, data.Features, 'DroneAttackBonus', -1, 10, 'Features');
-          checkClamp(item, data.Features, 'DroneDefenseBonus', -1, 10, 'Features');
+          checkClamp(item, data.Features, 'ShipWeightBonus', -1, 100, 'Features');
+          checkClamp(item, data.Features, 'EquipmentWeightBonus', -1, 100, 'Features');
+          checkClamp(item, data.Features, 'VelocityBonus', -1, 100, 'Features');
+          checkClamp(item, data.Features, 'TurnRateBonus', -1, 100, 'Features');
+          checkClamp(item, data.Features, 'ArmorBonus', -1, 100, 'Features');
+          checkClamp(item, data.Features, 'ShieldBonus', -1, 100, 'Features');
+          checkClamp(item, data.Features, 'EnergyBonus', -1, 100, 'Features');
+          checkClamp(item, data.Features, 'DroneBuildSpeedBonus', -1, 100, 'Features');
+          checkClamp(item, data.Features, 'DroneAttackBonus', -1, 100, 'Features');
+          checkClamp(item, data.Features, 'DroneDefenseBonus', -1, 100, 'Features');
        }
 
        if (data.ColliderTolerance !== undefined) checkClamp(item, data, 'ColliderTolerance', 0, 1, 'Ship');
@@ -460,7 +465,10 @@ export function useValidator() {
           checkClamp(item, data, 'Value', 0, 2147483647, 'ShipToValue');
        }
 
+       // AI Behavior nodes
        const checkBehaviorNodes = (obj) => {
+          if (!config.checkAiLogic) return;
+          
           if (!obj || typeof obj !== 'object') return;
           if (Array.isArray(obj)) {
              obj.forEach(checkBehaviorNodes);
@@ -470,7 +478,7 @@ export function useValidator() {
           if (Array.isArray(obj.Requirements)) {
              obj.Requirements.forEach((req) => {
                 if (req.Type === undefined || req.Type < 0 || req.Type > 21) {
-                   addError(item, `❌ Fatal (AI): BehaviorNodeRequirement has invalid Type ID (${req.Type}). Game will crash!`);
+                   addError(item, `❌ Fatal (AI): BehaviorNodeRequirement has invalid Type ID (${req.Type}).`);
                 }
                 checkBehaviorNodes(req); 
              });
@@ -478,7 +486,7 @@ export function useValidator() {
 
           if (obj.Type !== undefined && (obj.Requirement !== undefined || obj.Nodes !== undefined || obj.Node !== undefined)) {
              if (obj.Type < 0 || obj.Type > 83) {
-                addError(item, `❌ Fatal (AI): BehaviorTreeNode has invalid Type ID (${obj.Type}). Game will crash!`);
+                addError(item, `❌ Fatal (AI): BehaviorTreeNode has invalid Type ID (${obj.Type}).`);
              }
              checkClamp(item, obj, 'Cooldown', 0, 3.4e38, `AI Node (Type ${obj.Type})`);
              

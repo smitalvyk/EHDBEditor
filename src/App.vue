@@ -1,24 +1,31 @@
 <script setup>
 import { ref, shallowRef, computed, onMounted, watch } from 'vue';
+
+// COMPOSABLES
 import { useFileSystem } from './composables/useFileSystem';
 import { useGameDatabase } from './composables/useGameDatabase';
 import { useLocalization } from './composables/useLocalization'; 
 import { useEditorNotes } from './composables/useEditorNotes'; 
+import { useValidator } from './composables/useValidator';
+import { useProjectDB } from './composables/useProjectDB';
+import { useDevConsole } from './composables/useDevConsole';
 
+// UTILS
+import { getMimeType, sortTreeNodes, countFiles } from './utils/fileHelpers';
+
+// COMPONENTS
 import FileTreeItem from './components/FileTreeItem.vue';
 import FilePreview from './components/FilePreview.vue';
 import EditorModal from './components/EditorModal.vue';
 import VisualEditorModal from './components/VisualEditorModal.vue';
 import XmlLocalizationEditor from './components/XmlLocalizationEditor.vue';
-import { useValidator } from './composables/useValidator';
 
-// ZIP LIBRARY
+// LIBRARIES
 import JSZip from 'jszip';
-
-// ADDED FOR ANDROID (CAPACITOR)
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
 
+// --- INIT COMPOSABLES ---
 const { 
   isNative, availableProjects, loadProjectsList, createNewProject, openNativeProject,
   openDirectory, filesTree, rootHandle, selectedFile, selectedContent, fileType, 
@@ -29,6 +36,8 @@ const { clearDatabase, registerItem, printStats } = useGameDatabase();
 const { loadAllDictionaries, isLoadingDicts } = useLocalization();
 const { initNotes } = useEditorNotes(); 
 const { runChecks } = useValidator();
+const { clearProjectDB, saveToProjectDB, updateSingleFileInDB, getFileFromDB, getAllFilesFromDB } = useProjectDB();
+const { isConsoleOpen, appLogs, startLongPressTimer, cancelLongPress, setupConsoleInterceptor } = useDevConsole();
 
 // --- STATE ---
 const isEditorOpen = ref(false);
@@ -61,8 +70,12 @@ const selectedTypeFilter = ref('All');
 
 const confirmAction = ref({ show: false, title: '', message: '', action: null });
 
-const totalErrorsCount = computed(() => validationErrors.value.filter(e => e.message.includes('ERROR')).length);
-const totalWarningsCount = computed(() => validationErrors.value.filter(e => e.message.includes('WARNING')).length);
+const totalErrorsCount = computed(() => validationErrors.value.filter(e => e.message.includes('❌')).length);
+const totalWarningsCount = computed(() => validationErrors.value.filter(e => e.message.includes('⚠️')).length);
+
+
+// DEV CONSOLE BINDING
+const startLongPress = () => startLongPressTimer(() => { isSettingsOpen.value = false; });
 
 // TYPE MAP
 const typeMap = {
@@ -96,10 +109,11 @@ const availableErrorTypes = computed(() => {
   return [{ value: 'All', label: 'All' }, ...list];
 });
 
+
 const filteredValidationErrors = computed(() => {
   return validationErrors.value.filter(err => {
-    const isWarning = err.message.includes('WARNING');
-    const isError = err.message.includes('ERROR');
+    const isWarning = err.message.includes('⚠️');
+    const isError = err.message.includes('❌');
     if (isWarning && !showWarningsFilter.value) return false;
     if (isError && !showErrorsFilter.value) return false;
     if (selectedTypeFilter.value !== 'All' && String(err.itemType) !== String(selectedTypeFilter.value)) return false;
@@ -119,15 +133,20 @@ const displayedErrors = computed(() => {
 
 const loadMoreErrors = () => { displayLimit.value += 50; };
 const openValidatorWindow = () => { isValidatorOpen.value = true; };
+// Validation Settings
+const validatorSettings = ref({
+  checkMissingRefs: true,
+  checkClamps: true,
+  checkAiLogic: true
+});
 const handleRunScanner = () => {
   isValidatorLoading.value = true;
   displayLimit.value = 50; 
   setTimeout(() => {
-    validationErrors.value = runChecks();
+    validationErrors.value = runChecks(validatorSettings.value); // Pass settings here
     isValidatorLoading.value = false;
   }, 50);
 };
-
 const findNodeByPath = (nodes, targetPath) => {
   if (!targetPath) return null;
   const target = String(targetPath).trim();
@@ -222,98 +241,6 @@ const isSearching = ref(false);
 const filteredFilesTree = ref([]);  
 let searchTimeout = null;
 
-const countFiles = (nodes) => {
-  let count = 0;
-  for (const node of nodes) {
-    if (node.kind === 'file' && node.name.toLowerCase().endsWith('.json')) count++;
-    else if (node.kind === 'directory' && node.children) count += countFiles(node.children);
-  }
-  return count;
-};
-
-// ==========================================
-// INDEXEDDB CORE
-// ==========================================
-const DB_NAME = 'EHDB_WebProject';
-const STORE_NAME = 'files';
-
-const initDB = () => {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'fullPath' });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-};
-
-const clearProjectDB = async () => {
-  const db = await initDB();
-  return new Promise(resolve => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).clear();
-    tx.oncomplete = () => resolve();
-  });
-};
-
-const saveToProjectDB = async (files) => {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    files.forEach(f => store.put(f));
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-};
-
-const updateSingleFileInDB = async (fullPath, data) => {
-  const db = await initDB();
-  return new Promise(resolve => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).put({ fullPath, data });
-    tx.oncomplete = () => resolve();
-  });
-};
-
-const getFileFromDB = async (fullPath) => {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const req = tx.objectStore(STORE_NAME).get(fullPath);
-    req.onsuccess = () => resolve(req.result ? req.result.data : null);
-    req.onerror = () => reject(req.error);
-  });
-};
-
-const getAllFilesFromDB = async () => {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const req = tx.objectStore(STORE_NAME).getAll();
-    req.onsuccess = () => resolve(req.result || []);
-    req.onerror = () => reject(req.error);
-  });
-};
-
-// ==========================================
-// MIME TYPE HELPER FOR IMAGES AND AUDIO
-// ==========================================
-const getMimeType = (filename) => {
-  const ext = filename.split('.').pop().toLowerCase();
-  if (ext === 'png') return 'image/png';
-  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
-  if (ext === 'gif') return 'image/gif';
-  if (ext === 'ogg' || ext === 'ogv') return 'audio/ogg';
-  if (ext === 'wav') return 'audio/wav';
-  if (ext === 'mp3') return 'audio/mpeg';
-  return 'application/octet-stream';
-};
-
 // ==========================================
 // ZIP FILE LOADING LOGIC
 // ==========================================
@@ -361,7 +288,6 @@ const handleZipSelect = async (event) => {
             name: part, 
             kind: 'file', 
             fullPath: relativePath,
-            // Фейковый Handle для компонентов предпросмотра
             handle: {
               kind: 'file',
               name: part,
@@ -386,13 +312,13 @@ const handleZipSelect = async (event) => {
     }
     
     await saveToProjectDB(dbFiles);
-    filesTree.value = root;
+    filesTree.value = sortTreeNodes(root);
     searchQuery.value = '';
-    filteredFilesTree.value = root;
+    filteredFilesTree.value = filesTree.value;
     clearDatabase();
     
     setTimeout(async () => {
-      await scanAllFiles(root, '');
+      await scanAllFiles(filesTree.value, '');
       await loadAllDictionaries();
       isScanning.value = false;
       printStats();
@@ -449,7 +375,7 @@ const handleOpenFolder = async () => {
     try {
       await openDirectory();
       isZipMode.value = false;
-      await clearProjectDB();
+      await clearProjectDB(); 
       startIndexing();
     } catch (e) {
       console.warn("Folder selection aborted or failed", e);
@@ -622,7 +548,6 @@ onMounted(async () => {
               name: part, 
               kind: 'file', 
               fullPath: file.fullPath,
-              // Фейковый Handle для восстановления дерева из кэша
               handle: {
                 kind: 'file',
                 name: part,
@@ -643,8 +568,8 @@ onMounted(async () => {
         }
       });
       
-      filesTree.value = root;
-      filteredFilesTree.value = root;
+      filesTree.value = sortTreeNodes(root);
+      filteredFilesTree.value = filesTree.value;
       totalFilesToScan.value = countFiles(root);
       isScanning.value = true;
       clearDatabase();
@@ -726,40 +651,6 @@ const toggleTheme = () => { isDark.value = !isDark.value; };
 const updateThemeClass = () => document.documentElement.classList.toggle('dark-theme', isDark.value);
 const toggleSidebar = () => { isSidebarOpen.value = !isSidebarOpen.value; };
 
-// ==========================================
-// DEVELOPER CONSOLE
-// ==========================================
-const isConsoleOpen = ref(false);
-const appLogs = ref([]);
-let longPressTimer = null;
-
-const startLongPress = () => {
-  if (longPressTimer) clearTimeout(longPressTimer);
-  longPressTimer = setTimeout(() => {
-    isConsoleOpen.value = true;
-    isSettingsOpen.value = false;
-  }, 3000); 
-};
-
-const cancelLongPress = () => {
-  if (longPressTimer) clearTimeout(longPressTimer);
-};
-
-const setupConsoleInterceptor = () => {
-  const originalLog = console.log;
-  const originalWarn = console.warn;
-  const originalError = console.error;
-
-  const addLog = (type, args) => {
-    const message = Array.from(args).map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-    appLogs.value.push({ type, message, time: new Date().toLocaleTimeString() });
-    if (appLogs.value.length > 200) appLogs.value.shift(); 
-  };
-
-  console.log = function() { addLog('log', arguments); originalLog.apply(console, arguments); };
-  console.warn = function() { addLog('warn', arguments); originalWarn.apply(console, arguments); };
-  console.error = function() { addLog('error', arguments); originalError.apply(console, arguments); };
-};
 </script>
 
 <template>
@@ -772,7 +663,6 @@ const setupConsoleInterceptor = () => {
       <div class="window-title">EHDBEditor</div>
       
       <div class="actions">
-        
         <button @click="handleOpenFolder" class="btn-primary mobile-hidden" :disabled="isScanning" v-if="!isNative">
           <span v-if="isScanning && !isZipMode">
             {{ isLoadingDicts ? '📖 Dictionaries...' : `⏳ Scanning... ${scanProgress}%` }}
@@ -945,6 +835,22 @@ const setupConsoleInterceptor = () => {
             <button @click="isValidatorOpen = false" class="btn-icon close-btn">✖</button>
           </div>
           
+          <div class="validator-scan-settings" style="display: flex; gap: 20px; font-size: 12px; padding: 12px 20px; background: rgba(0,0,0,0.1); border-bottom: 1px solid var(--border-light); align-items: center; flex-wrap: wrap;">
+            <span style="color: var(--accent-color); font-weight: bold; text-transform: uppercase; font-size: 11px; letter-spacing: 1px;">Rules:</span>
+            <label class="cursor-pointer" style="display: flex; gap: 6px; align-items: center;">
+              <input type="checkbox" v-model="validatorSettings.checkMissingRefs">
+              Check Missing IDs
+            </label>
+            <label class="cursor-pointer" style="display: flex; gap: 6px; align-items: center;">
+              <input type="checkbox" v-model="validatorSettings.checkClamps">
+              Check Limits (Clamp)
+            </label>
+            <label class="cursor-pointer" style="display: flex; gap: 6px; align-items: center;">
+              <input type="checkbox" v-model="validatorSettings.checkAiLogic">
+              Check AI Trees
+            </label>
+          </div>
+
           <div class="settings-body" v-if="isValidatorLoading">
              <div class="loading-state">
                 <div class="spinner"></div>
@@ -954,7 +860,7 @@ const setupConsoleInterceptor = () => {
 
           <div class="settings-body" v-else>
             <div v-if="validationErrors.length === 0" class="empty-msg">
-              No diagnostic data. Click "Run Scan" to start analysis.
+              No diagnostic data. Select rules above and click "Run Scan" to start analysis.
             </div>
 
             <div v-else class="validator-content">
@@ -998,7 +904,7 @@ const setupConsoleInterceptor = () => {
                    ✅ All filtered items are hidden or no errors found.
                 </div>
                 
-                <div v-for="(err, i) in displayedErrors" :key="i" class="error-item" :class="{ 'is-warning': err.message.includes('WARNING') }">
+                <div v-for="(err, i) in displayedErrors" :key="i" class="error-item" :class="{ 'is-warning': err.message.includes('⚠️') }">
                    <div class="err-header">
                      <span class="err-file">
                         File: {{ err.path }} <span class="err-meta">(ID: {{ err.itemId }} | Type: {{ getTypeName(err.itemType) }})</span>
@@ -1020,7 +926,6 @@ const setupConsoleInterceptor = () => {
           </div>
         </div>
       </div>
-
       <div v-if="confirmAction.show" class="mini-confirm-overlay">
         <div class="mini-confirm-card">
           <h4>{{ confirmAction.title }}</h4>
