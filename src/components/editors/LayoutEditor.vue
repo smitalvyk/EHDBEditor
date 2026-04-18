@@ -613,8 +613,12 @@ const onInputStringChange = (e) => {
 
 .mini-grid-wrapper { position: relative; width: 150px; height: 150px; overflow: hidden; border-radius: 4px; }
 .mini-bg-image { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; transform: rotate(-90deg); z-index: 1; opacity: 0.5; pointer-events: none; }
-.mini-grid { position: relative; width: 100%; height: 100%; z-index: 2; display: grid; background: transparent; pointer-events: none; }
-.mini-cell { width: 100%; height: 100%; box-sizing: border-box; }
+
+/* ИСПРАВЛЕНИЕ: Добавлен gap: 1px для создания прозрачных рамок между блоками */
+.mini-grid { position: relative; width: 100%; height: 100%; z-index: 2; display: grid; gap: 1px; background: transparent; pointer-events: none; }
+
+/* ИСПРАВЛЕНИЕ: Добавлена GPU-ускоренная тень для разметки пустых ячеек */
+.mini-cell { width: 100%; height: 100%; box-sizing: border-box; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05); }
 
 .string-preview { width: 100%; }
 .string-input { width: 100%; font-family: monospace; font-size: 11px; color: var(--text-secondary); background: rgba(0,0,0,0.4); border: 1px solid var(--border-light); padding: 8px 10px; border-radius: 4px; box-sizing: border-box; opacity: 0.8; }
@@ -698,7 +702,8 @@ const onInputStringChange = (e) => {
 .drawing-grid { position: relative; width: 100%; height: 100%; z-index: 2; display: grid; gap: 1px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.2); box-sizing: border-box; touch-action: none; }
 .is-pan-mode .drawing-grid { touch-action: auto; }
 
-.grid-cell { width: 100%; height: 100%; cursor: crosshair; user-select: none; border: 1px dashed rgba(255, 255, 255, 0.15); box-sizing: border-box; }
+/* ИСПРАВЛЕНИЕ: Заменен тяжелый border: dashed на быструю внутреннюю тень */
+.grid-cell { width: 100%; height: 100%; cursor: crosshair; user-select: none; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15); box-sizing: border-box; transition: box-shadow 0.1s; }
 .grid-cell:hover { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.8); }
 
 /* OPTIMIZED PALETTE CLASSES */

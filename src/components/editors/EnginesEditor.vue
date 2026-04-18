@@ -111,7 +111,6 @@ const removeEngine = (idx) => {
     <button @click="addEngine" class="btn-add giant" style="color: #ffff44; border-color: #ffff44;">+ ADD ENGINE</button>
   </div>
 </template>
-
 <style scoped>
 .barrels-wrapper { display: flex; flex-direction: column; gap: 10px; width: 100%; box-sizing: border-box; }
 
@@ -119,11 +118,33 @@ const removeEngine = (idx) => {
 .preview-section { display: flex; flex-direction: column; align-items: center; margin-bottom: 15px; background: rgba(0,0,0,0.15); border: 1px solid var(--border-light); border-radius: 6px; padding: 10px; }
 
 .barrel-preview-container { display: flex; justify-content: center; width: 100%; }
-.barrel-preview-bg { width: 640px; height: 640px; background-color: #607d8b; border-radius: 4px; display: flex; justify-content: center; align-items: center; max-width: 100%; aspect-ratio: 1 / 1; }
-.preview-content-wrapper { position: relative; width: 400px; height: 400px; border: 1px solid #000; display: flex; justify-content: center; align-items: center; max-width: 90%; max-height: 90%; }
+
+/* ИСПРАВЛЕНИЕ: Делаем фон резиновым, но строго квадратным */
+.barrel-preview-bg { 
+  width: 100%; 
+  max-width: 640px; 
+  aspect-ratio: 1 / 1; /* Всегда квадрат! */
+  background-color: #607d8b; 
+  border-radius: 4px; 
+  display: flex; 
+  justify-content: center; 
+  align-items: center; 
+}
+
+/* ИСПРАВЛЕНИЕ: Внутренний контейнер тоже строго квадратный и зависит от родителя */
+.preview-content-wrapper { 
+  position: relative; 
+  width: 62.5%; /* Это ровно 400px от 640px, сохраняет нужный отступ */
+  aspect-ratio: 1 / 1; /* Всегда квадрат! */
+  border: 1px solid rgba(0,0,0,0.5); 
+  display: flex; 
+  justify-content: center; 
+  align-items: center; 
+}
 
 .preview-image {
   position: absolute;
+  top: 0; left: 0;
   width: 100%; 
   height: 100%;
   object-fit: contain;
