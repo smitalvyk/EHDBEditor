@@ -13,9 +13,9 @@ const updateField = (key, value) => {
 };
 
 // === TYPE DEFINITION ===
-// Get type name by ID from Map
+// ИСПОЛЬЗУЕМ ?? 0 ЧТОБЫ ВОССТАНАВЛИВАТЬ НЕВИДИМЫЕ НУЛИ
 const typeName = computed(() => {
-  const id = props.modelValue.Type;
+  const id = props.modelValue.Type ?? 0;
   return BehaviorRequirementTypeMap[id] || String(id);
 });
 
@@ -64,12 +64,12 @@ const updateRequirement = (index, newVal) => {
     <div class="req-header">
       <div class="type-select-row">
         <label>Req Type</label>
-        <select :value="modelValue.Type" @change="e => updateField('Type', Number(e.target.value))" class="win-input small-select">
+        <select :value="modelValue.Type ?? 0" @change="e => updateField('Type', Number(e.target.value))" class="win-input small-select">
           <option v-for="item in SelectOptions.BehaviorRequirementTypeList" :key="item.id" :value="item.id">
             {{ item.name }}
           </option>
-          <option v-if="!BehaviorRequirementTypeMap[modelValue.Type]" :value="modelValue.Type">
-            Unknown ({{ modelValue.Type }})
+          <option v-if="!BehaviorRequirementTypeMap[modelValue.Type ?? 0]" :value="modelValue.Type ?? 0">
+            Unknown ({{ modelValue.Type ?? 0 }})
           </option>
         </select>
       </div>
@@ -123,25 +123,16 @@ const updateRequirement = (index, newVal) => {
 </template>
 
 <style scoped>
-.req-block {
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  padding: 6px;
-  margin-bottom: 6px;
-}
+.req-block { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; padding: 6px; margin-bottom: 6px; }
 .req-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
 .type-select-row { display: flex; align-items: center; gap: 8px; flex: 1; }
 .type-select-row label { font-size: 10px; color: var(--accent-color); font-weight: bold; white-space: nowrap; }
 .small-select { padding: 2px 4px; font-size: 11px; height: 24px; min-width: 120px; }
-
 .btn-delete-req { background: none; border: none; color: #ff5555; font-weight: bold; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 4px; }
-
 .req-body { display: flex; flex-direction: column; gap: 4px; padding-left: 4px; }
 .req-row { display: flex; align-items: center; gap: 6px; }
 .req-row label { width: 60px; font-size: 10px; opacity: 0.7; }
 .win-input { flex: 1; padding: 2px 4px; font-size: 11px; background: rgba(0,0,0,0.3); border: 1px solid #444; color: white; border-radius: 3px; }
-
 /* NESTED */
 .nested-reqs { margin-top: 4px; padding-left: 8px; border-left: 1px dashed rgba(255,255,255,0.2); }
 .nested-header { font-size: 10px; opacity: 0.5; margin-bottom: 4px; }

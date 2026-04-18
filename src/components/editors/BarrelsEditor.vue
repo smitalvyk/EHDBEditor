@@ -18,10 +18,41 @@ const collapseAll = () => {
   collapsedItems.value = newCollapsed;
 };
 
+// === ARC LOGIC ===
+const getEffectiveArc = (item) => {
+  const arc = Number(item.AutoAimingArc) || 0;
+  if (arc > 0) return arc;
+  
+  switch (Number(item.PlatformType) || 0) {
+    case 1: return 360; // AutoTarget
+    case 2: return 80;  // AutoTargetFrontal
+    case 3: return 20;  // TargetingUnit
+    case 0: 
+    default: return 0;  // Common
+  }
+};
+
+const getArcPath = (arcAngle) => {
+  if (arcAngle <= 0 || arcAngle >= 360) return '';
+  
+  const radius = 0.5;
+  const startAngle = -(arcAngle / 2) * (Math.PI / 180);
+  const endAngle = (arcAngle / 2) * (Math.PI / 180);
+
+  const x1 = radius * Math.sin(startAngle);
+  const y1 = radius * Math.cos(startAngle);
+  const x2 = radius * Math.sin(endAngle);
+  const y2 = radius * Math.cos(endAngle);
+
+  const largeArcFlag = arcAngle > 180 ? 1 : 0;
+
+  return `M 0 0 L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
+};
+
 // === ARRAY MANAGEMENT ===
 const addBarrel = () => {
   const arr = Array.isArray(props.modelValue) ? [...props.modelValue] : [];
-  arr.push({ Position: { x: 0, y: 0 }, Rotation: 0, Offset: 0, AutoAimingArc: 360, RotationSpeed: 50, WeaponClass: "", Image: "", Size: 1 });
+  arr.push({ Position: { x: 0, y: 0 }, Rotation: 0, Offset: 0, PlatformType: 0, AutoAimingArc: 0, RotationSpeed: 0, WeaponClass: "", Image: "", Size: 0 });
   emit('update:modelValue', arr);
   collapsedItems.value = { ...collapsedItems.value, [arr.length - 1]: false };
 };
@@ -71,7 +102,7 @@ const removeBarrel = (idx) => {
             
             <img :src="backgroundImage" class="preview-image" style="transform: rotate(-90deg);" />
             
-            <svg class="preview-svg" viewBox="-1 -1 2 2" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" style="overflow: visible;">
+            <svg class="preview-svg" viewBox="-1 -1 2 2" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="overflow: visible;">
               <g transform="scale(1, -1)">
                 <defs>
                   <g id="arrow-shape-red">
@@ -87,8 +118,23 @@ const removeBarrel = (idx) => {
                 <g v-for="(item, idx) in modelValue" :key="idx"
                   :transform="`translate(${clampPos(item.Position?.y)}, ${clampPos(item.Position?.x)}) rotate(${item.Rotation ?? 0})`">
                   <g transform="scale(0.6)">
+                    
+                    <path v-if="getEffectiveArc(item) > 0 && getEffectiveArc(item) < 360"
+                          :d="getArcPath(getEffectiveArc(item))"
+                          fill="rgba(255, 170, 0, 0.3)" stroke="#ffaa00" stroke-width="0.015" />
+                          
+                    <circle v-if="getEffectiveArc(item) >= 360"
+                            cx="0" cy="0" r="0.5" 
+                            fill="rgba(255, 170, 0, 0.3)" stroke="#ffaa00" stroke-width="0.015" />
+
                     <use href="#arrow-shape-red" />
                     <circle cx="0" cy="0" :r="Math.max(0, 0.06 * (1 + (item.Offset ?? 0)))" fill="none" stroke="red" stroke-width="0.015" />
+                    
+                    <circle cx="0" cy="0" r="0.08" fill="#1e1e1e" stroke="#ffff00" stroke-width="0.01" />
+                    <text x="0" y="0.01" font-size="0.09" fill="#ffff00" text-anchor="middle" dominant-baseline="central" font-weight="bold" transform="scale(1, -1)">
+                      {{ idx + 1 }}
+                    </text>
+
                   </g>
                 </g>
               </g>
@@ -112,21 +158,37 @@ const removeBarrel = (idx) => {
       </div>
 
       <div v-show="!collapsedItems[idx]" class="ic-body">
+        
         <div class="ic-row">
           <div class="field-box"><label>Pos X</label><input type="number" :value="item.Position?.x ?? 0" @input="e => updatePositionNum(idx, 'x', e.target.value)" step="0.01" min="-1.5" max="1.5" class="win-input"></div>
           <div class="field-box"><label>Pos Y</label><input type="number" :value="item.Position?.y ?? 0" @input="e => updatePositionNum(idx, 'y', e.target.value)" step="0.01" min="-1.5" max="1.5" class="win-input"></div>
-          <div class="field-box"><label>Rotation</label><input type="number" :value="item.Rotation ?? 0" @input="e => updateBarrelNum(idx, 'Rotation', e.target.value)" min="-360" max="360" step="0.1" class="win-input"></div>
-        </div>
-        <div class="ic-row">
-          <div class="field-box"><label>Auto Aim Arc</label><input type="number" :value="item.AutoAimingArc ?? 0" @input="e => updateBarrelNum(idx, 'AutoAimingArc', e.target.value)" min="0" max="360" step="0.1" class="win-input"></div>
-          <div class="field-box"><label>Rot. Speed</label><input type="number" :value="item.RotationSpeed ?? 0" @input="e => updateBarrelNum(idx, 'RotationSpeed', e.target.value)" min="0" max="1000" step="0.1" class="win-input"></div>
           <div class="field-box"><label>Offset</label><input type="number" :value="item.Offset ?? 0" @input="e => updateBarrelNum(idx, 'Offset', e.target.value)" min="0" step="0.1" class="win-input"></div>
         </div>
+
         <div class="ic-row">
+          <div class="field-box">
+            <label>Platform Type</label>
+            <select :value="item.PlatformType ?? 0" @change="e => updateBarrelNum(idx, 'PlatformType', e.target.value)" class="win-input">
+              <option :value="0" class="dark-opt">Common</option>
+              <option :value="1" class="dark-opt">AutoTarget</option>
+              <option :value="2" class="dark-opt">AutoTargetFrontal</option>
+              <option :value="3" class="dark-opt">TargetingUnit</option>
+            </select>
+          </div>
+          <div class="field-box"><label>Rotation</label><input type="number" :value="item.Rotation ?? 0" @input="e => updateBarrelNum(idx, 'Rotation', e.target.value)" min="-360" max="360" step="0.1" class="win-input"></div>
+          <div class="field-box"><label>Rot. Speed</label><input type="number" :value="item.RotationSpeed ?? 0" @input="e => updateBarrelNum(idx, 'RotationSpeed', e.target.value)" min="0" max="1000" step="0.1" class="win-input"></div>
+        </div>
+
+        <div class="ic-row">
+          <div class="field-box"><label>Auto Aim Arc</label><input type="number" :value="item.AutoAimingArc ?? 0" @input="e => updateBarrelNum(idx, 'AutoAimingArc', e.target.value)" min="0" max="360" step="0.1" class="win-input"></div>
           <div class="field-box"><label>Weapon Class</label><input type="text" :value="item.WeaponClass || ''" @input="e => updateBarrel(idx, 'WeaponClass', e.target.value)" class="win-input"></div>
-          <div class="field-box"><label>Image</label><input type="text" :value="item.Image || ''" @input="e => updateBarrel(idx, 'Image', e.target.value)" class="win-input"></div>
           <div class="field-box"><label>Size</label><input type="number" :value="item.Size ?? 0" @input="e => updateBarrelNum(idx, 'Size', e.target.value)" min="0" max="100" step="0.1" class="win-input"></div>
         </div>
+
+        <div class="ic-row">
+          <div class="field-box" style="flex: 1 1 100%;"><label>Image</label><input type="text" :value="item.Image || ''" @input="e => updateBarrel(idx, 'Image', e.target.value)" class="win-input"></div>
+        </div>
+
       </div>
     </div>
     
@@ -140,10 +202,28 @@ const removeBarrel = (idx) => {
 
 /* === PREVIEW === */
 .preview-section { display: flex; flex-direction: column; align-items: center; margin-bottom: 15px; background: rgba(0,0,0,0.15); border: 1px solid var(--border-light); border-radius: 6px; padding: 10px; }
-
 .barrel-preview-container { display: flex; justify-content: center; width: 100%; }
-.barrel-preview-bg { width: 640px; height: 640px; background-color: #607d8b; border-radius: 4px; display: flex; justify-content: center; align-items: center; max-width: 100%; aspect-ratio: 1 / 1; }
-.preview-content-wrapper { position: relative; width: 400px; height: 400px; border: 1px solid #000000; display: flex; justify-content: center; align-items: center; max-width: 90%; max-height: 90%; }
+
+.barrel-preview-bg { 
+  width: 100%; 
+  max-width: 500px; 
+  background-color: #607d8b; 
+  border-radius: 4px; 
+  display: flex; 
+  justify-content: center; 
+  align-items: center; 
+  padding: 15px;
+  box-sizing: border-box;
+}
+
+.preview-content-wrapper { 
+  position: relative; 
+  width: 100%; 
+  max-width: 400px; 
+  aspect-ratio: 1 / 1; 
+  border: 1px solid #000000; 
+  background: rgba(0,0,0,0.1);
+}
 
 .preview-image {
   position: absolute;
@@ -176,6 +256,8 @@ const removeBarrel = (idx) => {
 .field-box label { font-size: 10px; font-weight: bold; color: var(--text-secondary); opacity: 0.8; width: 80px; text-transform: uppercase; white-space: nowrap;}
 .win-input { flex: 1; width: 100%; padding: 4px 6px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: white; border-radius: 4px; font-size: 11px; box-sizing: border-box;}
 .win-input:focus { border-color: var(--accent-color); outline: none; }
+.dark-opt { background: #2b2b2b; color: #ffffff; }
+
 .btn-add { width: 100%; padding: 6px; background: transparent; border: 1px dashed var(--border-light); color: var(--text-secondary); cursor: pointer; border-radius: 4px; transition: 0.2s; }
 .btn-add:hover { border-color: #ffaa00; color: #ffaa00; background: rgba(255, 170, 0, 0.05); }
 .btn-add.giant { padding: 12px; font-size: 14px; border-color: #ffaa00; color: #ffaa00; margin-top: 5px;}
@@ -183,20 +265,20 @@ const removeBarrel = (idx) => {
 /* === RESPONSIVE (MOBILE) === */
 @media (max-width: 768px) {
   .ic-row {
-    flex-direction: column; /* Force rows to stack entirely */
+    flex-direction: column; 
     gap: 8px;
   }
   
   .field-box {
-    flex-direction: column; /* Move label above input */
+    flex-direction: column; 
     align-items: flex-start;
-    flex: 1 1 100%; /* Take up the entire width */
+    flex: 1 1 100% !important; 
     gap: 4px;
     padding: 8px;
   }
   
   .field-box label {
-    width: 100%; /* Let the label take full width */
+    width: 100%; 
     margin-bottom: 2px;
   }
 }

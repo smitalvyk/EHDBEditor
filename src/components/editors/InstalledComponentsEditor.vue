@@ -26,7 +26,6 @@ const globSprites = import.meta.glob([
 const allLocalSprites = {};
 for (const path in globSprites) {
   if (path.startsWith('/public/')) {
-    // Prepend Vite's base URL so it works on GitHub Pages
     allLocalSprites[path] = import.meta.env.BASE_URL + path.replace('/public/', ''); 
   } else {
     allLocalSprites[path] = globSprites[path].default || globSprites[path];
@@ -62,7 +61,8 @@ const resolveImage = async (fileName) => {
 const componentIcons = ref({});
 
 const loadIcon = async (compId) => {
-  if (!compId || componentIcons.value[compId] !== undefined) return;
+  // Using strictly !== undefined to allow 0
+  if (compId === undefined || compId === null || componentIcons.value[compId] !== undefined) return;
   componentIcons.value[compId] = null;
   const components = getItemsByType(ItemType.Component) || [];
   const comp = components.find(c => c.id === compId);
@@ -107,7 +107,8 @@ const getShipCellBorder = (typeChar) => {
 
 watch(() => props.modelValue, (newVal) => {
   if (newVal && Array.isArray(newVal)) {
-    newVal.forEach(item => { if (item.ComponentId) loadIcon(item.ComponentId); });
+    // Check using !== undefined to allow 0
+    newVal.forEach(item => { if (item.ComponentId !== undefined) loadIcon(item.ComponentId); });
   }
 }, { deep: true, immediate: true });
 
@@ -139,7 +140,8 @@ const collapseAll = () => {
 
 const addItem = () => {
   const arr = Array.isArray(props.modelValue) ? [...props.modelValue] : [];
-  arr.push({ ComponentId: 0, Modification: 0, Quality: 0, X: 0, Y: 0, BarrelId: 0, Behaviour: 0, KeyBinding: 0 });
+  // Changed default BarrelId to -1
+  arr.push({ ComponentId: 0, Modification: 0, Quality: 0, X: 0, Y: 0, BarrelId: -1, Behaviour: 0, KeyBinding: 0 });
   emit('update:modelValue', arr);
   collapsedItems.value = { ...collapsedItems.value, [arr.length - 1]: false };
 };
@@ -165,9 +167,11 @@ const removeItem = (idx) => {
 };
 
 const getComponentName = (id) => {
+  // Using ?? to allow 0
+  const compId = id ?? 0;
   const components = getItemsByType(ItemType.Component) || [];
-  const comp = components.find(c => c.id === id);
-  return comp ? comp.name : 'Empty';
+  const comp = components.find(c => c.id === compId);
+  return comp ? comp.name : 'Unknown';
 };
 
 const baseShipCells = computed(() => {
@@ -211,11 +215,11 @@ const previewGrid = computed(() => {
     maxY = Math.max(maxY, cell.ry);
   });
   const placed = items.map((item, idx) => {
-    const compId = item.ComponentId;
+    const compId = item.ComponentId ?? 0;
     const components = getItemsByType(ItemType.Component) || [];
     const compData = components.find(c => c.id === compId)?.data || {};
-    const cx = item.X || 0;
-    const cy = item.Y || 0;
+    const cx = item.X ?? 0;
+    const cy = item.Y ?? 0;
     let cells = [];
     let size = 1;
     let minDx = Infinity, maxDx = -Infinity, minDy = Infinity, maxDy = -Infinity;
@@ -367,8 +371,7 @@ const previewGrid = computed(() => {
         <div class="ic-row">
           <div class="field-box">
             <label>Component</label>
-            <select :value="item.ComponentId || 0" @change="e => updateItem(idx, 'ComponentId', Number(e.target.value))" class="win-input">
-              <option :value="0" class="dark-opt">[NONE]</option>
+            <select :value="item.ComponentId ?? 0" @change="e => updateItem(idx, 'ComponentId', Number(e.target.value))" class="win-input">
               <option v-for="comp in getItemsByType(ItemType.Component)" :key="comp.id" :value="comp.id" class="dark-opt">
                 [ID: {{ comp.id }}] {{ comp.name }}
               </option>
@@ -376,7 +379,7 @@ const previewGrid = computed(() => {
           </div>
           <div class="field-box">
             <label>Modification</label>
-            <select :value="item.Modification || 0" @change="e => updateItem(idx, 'Modification', Number(e.target.value))" class="win-input">
+            <select :value="item.Modification ?? 0" @change="e => updateItem(idx, 'Modification', Number(e.target.value))" class="win-input">
               <option :value="0" class="dark-opt">[NONE]</option>
               <option v-for="mod in getItemsByType(ItemType.ComponentMod)" :key="mod.id" :value="mod.id" class="dark-opt">
                 [ID: {{ mod.id }}] {{ mod.name || 'Mod' }}
@@ -388,7 +391,7 @@ const previewGrid = computed(() => {
         <div class="ic-row">
           <div class="field-box">
             <label>Quality</label>
-            <select :value="item.Quality || 0" @change="e => updateItem(idx, 'Quality', Number(e.target.value))" class="win-input">
+            <select :value="item.Quality ?? 0" @change="e => updateItem(idx, 'Quality', Number(e.target.value))" class="win-input">
               <option v-for="(opt, oIdx) in SelectOptions.ModificationQuality" :key="oIdx" :value="oIdx" class="dark-opt">
                 {{ opt }}
               </option>
@@ -396,26 +399,26 @@ const previewGrid = computed(() => {
           </div>
           <div class="field-box">
             <label>Barrel ID</label>
-            <input type="number" :value="item.BarrelId || 0" @input="e => updateItem(idx, 'BarrelId', parseInt(e.target.value))" min="0" max="255" class="win-input">
+            <input type="number" :value="item.BarrelId ?? -1" @input="e => updateItem(idx, 'BarrelId', parseInt(e.target.value))" min="-1" max="255" class="win-input">
           </div>
           <div class="field-box">
             <label>Behaviour</label>
-            <input type="number" :value="item.Behaviour || 0" @input="e => updateItem(idx, 'Behaviour', parseInt(e.target.value))" min="0" max="10" class="win-input">
+            <input type="number" :value="item.Behaviour ?? 0" @input="e => updateItem(idx, 'Behaviour', parseInt(e.target.value))" min="0" max="10" class="win-input">
           </div>
           <div class="field-box">
             <label>Key Binding</label>
-            <input type="number" :value="item.KeyBinding || 0" @input="e => updateItem(idx, 'KeyBinding', parseInt(e.target.value))" min="-10" max="10" class="win-input">
+            <input type="number" :value="item.KeyBinding ?? 0" @input="e => updateItem(idx, 'KeyBinding', parseInt(e.target.value))" min="-10" max="10" class="win-input">
           </div>
         </div>
 
         <div class="ic-row">
           <div class="field-box">
             <label>Pos X</label>
-            <input type="number" :value="item.X || 0" @input="e => updateItem(idx, 'X', parseInt(e.target.value))" min="-32768" max="32767" class="win-input">
+            <input type="number" :value="item.X ?? 0" @input="e => updateItem(idx, 'X', parseInt(e.target.value))" min="-32768" max="32767" class="win-input">
           </div>
           <div class="field-box">
             <label>Pos Y</label>
-            <input type="number" :value="item.Y || 0" @input="e => updateItem(idx, 'Y', parseInt(e.target.value))" min="-32768" max="32767" class="win-input">
+            <input type="number" :value="item.Y ?? 0" @input="e => updateItem(idx, 'Y', parseInt(e.target.value))" min="-32768" max="32767" class="win-input">
           </div>
         </div>
       </div>
@@ -428,7 +431,6 @@ const previewGrid = computed(() => {
 <style scoped>
 .installed-components-wrapper { display: flex; flex-direction: column; gap: 10px; width: 100%; min-width: 100%; box-sizing: border-box; }
 
-/* === FIXED CSS CENTERING (REMOVED TOP CLIPPING) === */
 .map-preview-panel { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 10px; display: flex; flex-direction: column; overflow: hidden; box-shadow: inset 0 5px 15px rgba(0,0,0,0.5);}
 .map-preview-header { padding: 8px 15px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 11px; font-weight: bold; color: var(--accent-color); text-transform: uppercase; display: flex; justify-content: space-between; background: rgba(255,255,255,0.02);}
 
@@ -462,7 +464,6 @@ const previewGrid = computed(() => {
 .map-component-wrapper:hover .comp-cell { background-color: rgba(255,255,255,0.2) !important; border-color: white !important; z-index: 5; }
 .map-component-wrapper:hover .map-icon-layer { transform: scale(1.15); z-index: 10; filter: drop-shadow(0 0 10px var(--accent-color)); }
 
-/* === OTHER LIST STYLES === */
 .global-controls { display: flex; gap: 10px; margin-bottom: 5px; width: 100%; box-sizing: border-box;}
 .btn-control { flex: 1; padding: 6px; background: rgba(255,255,255,0.05); color: var(--text-secondary); border: 1px solid var(--border-light); border-radius: 4px; cursor: pointer; transition: 0.2s; font-size: 11px; text-transform: uppercase; font-weight: bold; width: 100%;}
 .btn-control:hover { background: rgba(255,255,255,0.1); color: white; }
@@ -487,7 +488,6 @@ const previewGrid = computed(() => {
 .btn-del { background: rgba(255,50,50,0.1); color: #ff5555; border: 1px solid #ff5555; width: 24px; height: 24px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s;}
 .btn-del:hover { background: #ff5555; color: white; }
 
-/* === RESPONSIVE ROW STYLES === */
 .ic-row { display: flex; gap: 10px; width: 100%; box-sizing: border-box; flex-wrap: wrap; }
 
 .field-box { 
@@ -513,10 +513,9 @@ const previewGrid = computed(() => {
   100% { border-color: var(--border-light); box-shadow: none; background: rgba(0,0,0,0.2); }
 }
 
-/* === MOBILE ADAPTATION === */
 @media (max-width: 768px) {
   .map-viewport {
-    padding: 10px; /* Less empty space around the map on mobile */
+    padding: 10px;
   }
 
   .ic-row {

@@ -3,32 +3,76 @@ import { useGameDatabase } from './useGameDatabase';
 export function useValidator() {
   const { getItemsByType } = useGameDatabase();
 
-  const runChecks = (config = { checkMissingRefs: true, checkClamps: true, checkAiLogic: true }) => {
+  const runChecks = (config = { 
+    checkMissingRefs: true, checkClamps: true, checkAiLogic: true, 
+    fixClamps: true, fixStubs: true, fixEnums: false 
+  }) => {
     const errors = [];
     
-    const addError = (item, msg) => {
+    const addError = (item, msg, fixInfo = null) => {
       const path = item.filePath || item.fullPath || item.path || item.name || '';
       const upperPath = path.toUpperCase();
+      
       if (upperPath.includes('_FIX_NEEDED') || upperPath.includes('_BACKUP')) {
          return; 
       }
+      
       errors.push({
         fileName: item.name,
         path: path, 
         itemType: item.typeId || 'Unknown',
-        itemId: item.id,
-        message: msg
+        itemId: item.id !== undefined ? item.id : 'N/A', 
+        message: msg,
+        fixInfo: fixInfo, 
+        itemRef: item 
       });
+    };
+
+    // Helper: Generates standard minimal JSON for missing references
+    const generateStub = (typeId, id) => {
+        const base = { ItemType: typeId, Id: id, Name: `_MissingRef_${typeId}_${id}` };
+        if (typeId === 6) { base.ShipSettingsId = 1; base.Layout = "1"; }
+        else if (typeId === 7) { base.Layout = "1"; }
+        else if (typeId === 1) { base.ComponentStatsId = 1; base.Layout = "1"; base.Color = "#FFFFFF"; }
+        else if (typeId === 11) { base.ArmorPoints = 100; }
+        return base;
+    };
+
+    const addStubFix = (typeId, id) => {
+        return config.fixStubs ? {
+            type: 'create_stub',
+            stubPath: `_FIX/Type${typeId}_${id}_Stub.json`,
+            stubData: generateStub(typeId, id)
+        } : null;
+    };
+
+    const addMissingIdFix = (obj, field, defaultVal = 1) => {
+        return config.fixStubs ? {
+            type: 'missing_id',
+            applyFix: () => { obj[field] = defaultVal; }
+        } : null;
     };
 
     const checkClamp = (item, obj, field, min, max, contextName = '') => {
       if (!config.checkClamps) return;
       if (obj && obj[field] !== undefined && (obj[field] < min || obj[field] > max)) {
-        addError(item, `⚠️ Clamp Warning: ${contextName ? contextName+'.' : ''}'${field}' (${obj[field]}) out of bounds [${min} ... ${max}]. Game will clamp it!`);
+        const clampedValue = Math.max(min, Math.min(max, obj[field]));
+        const fix = config.fixClamps ? { type: 'clamp', applyFix: () => { obj[field] = clampedValue; } } : null;
+        addError(item, `⚠️ Out of bounds: ${contextName ? contextName+'.' : ''}'${field}' (${obj[field]}) should be [${min} ... ${max}]. The game will limit (clamp) it!`, fix);
       }
     };
 
-    // Global scanner configuration
+    const checkEnumFatal = (item, obj, field, min, max, contextStr) => {
+        if (!obj) return;
+        // Treat undefined as 0 for Unity serialization defaults
+        const val = obj[field] !== undefined ? obj[field] : 0;
+        
+        if (val < min || val > max) {
+            const fix = config.fixEnums ? { type: 'reset_enum', applyFix: () => { obj[field] = 0; } } : null;
+            addError(item, `❌ Fatal: ${contextStr} has invalid '${field}' (${val}). Game will crash!`, fix);
+        }
+    };
+
     const validTypes = [
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 
       25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 
@@ -54,14 +98,30 @@ export function useValidator() {
 
        // Type 8: ShipBuild
        if (item.typeId === 8 && config.checkMissingRefs) {
-          const shipExists = ships.some(s => s.id === data.ShipId);
-          if (!data.ShipId || !shipExists) {
-            addError(item, `❌ Fatal: ObjectTemplate.Ship cannot be null or invalid. (ShipId: ${data.ShipId || '0'})`);
+          if (data.ShipId === undefined || data.ShipId === null) {
+              addError(item, `❌ Fatal: ObjectTemplate.Ship cannot be null or missing.`, addMissingIdFix(data, 'ShipId', 1));
+          } else if (!ships.some(s => s.id === data.ShipId)) {
+              addError(item, `❌ Fatal: ObjectTemplate.Ship (ShipId: ${data.ShipId}) not found in database.`, addStubFix(6, data.ShipId));
           }
+          
           if (Array.isArray(data.Components)) {
              data.Components.forEach((comp, cIdx) => {
-                if (!comp.ComponentId || comp.ComponentId === 0 || !componentsList.some(c => c.id === comp.ComponentId)) {
-                   addError(item, `❌ Fatal: InstalledComponent[${cIdx}] (ID: ${comp.ComponentId}) not found in Components!`);
+                if (comp.ComponentId === undefined || comp.ComponentId === null) {
+                   const fix = config.fixStubs ? {
+                      type: 'missing_id',
+                      applyFix: () => { 
+                         const originalComp = { ...comp };
+                         for (let k in comp) delete comp[k]; 
+                         comp.ComponentId = 0; 
+                         for (let k in originalComp) {
+                            if (k !== 'ComponentId') comp[k] = originalComp[k];
+                         }
+                      }
+                   } : null;
+                   addError(item, `⚠️ Missing Field: InstalledComponent[${cIdx}] lacks 'ComponentId'. The game assumes 0 ($Afterburner).`, fix);
+                } 
+                else if (comp.ComponentId !== 0 && !componentsList.some(c => c.id === comp.ComponentId)) {
+                   addError(item, `❌ Fatal: InstalledComponent[${cIdx}] (ID: ${comp.ComponentId}) not found in Components database!`, addStubFix(1, comp.ComponentId));
                 }
              });
           }
@@ -72,7 +132,7 @@ export function useValidator() {
           data.Components.forEach((comp, cIdx) => {
              checkClamp(item, comp, 'X', -32768, 32767, `Component[${cIdx}]`);
              checkClamp(item, comp, 'Y', -32768, 32767, `Component[${cIdx}]`);
-             checkClamp(item, comp, 'BarrelId', 0, 255, `Component[${cIdx}]`);
+             checkClamp(item, comp, 'BarrelId', -1, 255, `Component[${cIdx}]`);
              checkClamp(item, comp, 'Behaviour', 0, 10, `Component[${cIdx}]`);
              checkClamp(item, comp, 'KeyBinding', -10, 10, `Component[${cIdx}]`);
           });
@@ -80,39 +140,40 @@ export function useValidator() {
 
        // Type 9: SatelliteBuild
        if (item.typeId === 9 && config.checkMissingRefs) {
-          const satExists = satellites.some(s => s.id === data.SatelliteId);
-          if (!data.SatelliteId || !satExists) {
-            addError(item, `❌ Fatal: ObjectTemplate.Satellite cannot be null or invalid. (SatelliteId: ${data.SatelliteId || '0'})`);
+          if (data.SatelliteId === undefined || data.SatelliteId === null) {
+              addError(item, `❌ Fatal: ObjectTemplate.Satellite cannot be null or missing.`, addMissingIdFix(data, 'SatelliteId', 1));
+          } else if (!satellites.some(s => s.id === data.SatelliteId)) {
+              addError(item, `❌ Fatal: ObjectTemplate.Satellite (SatelliteId: ${data.SatelliteId}) not found in database.`, addStubFix(7, data.SatelliteId));
           }
        }
 
        // Type 1: Component
        if (item.typeId === 1) {
            if (config.checkMissingRefs) {
-               if (!data.ComponentStatsId || data.ComponentStatsId === 0) {
-                   addError(item, `❌ Fatal: Component must have a valid ComponentStatsId!`);
+               if (data.ComponentStatsId === undefined || data.ComponentStatsId === null || data.ComponentStatsId === 0) {
+                   addError(item, `❌ Fatal: Component must have a valid ComponentStatsId!`, addMissingIdFix(data, 'ComponentStatsId', 1));
                } else if (!compStatsList.some(s => s.id === data.ComponentStatsId)) {
-                   addError(item, `❌ Fatal: ComponentStatsId (${data.ComponentStatsId}) not found in database (Type 11)!`);
+                   addError(item, `❌ Fatal: ComponentStatsId (${data.ComponentStatsId}) not found in database (Type 11)!`, addStubFix(11, data.ComponentStatsId));
                }
            }
            checkClamp(item, data, 'Level', 0, 2147483647, 'Component');
        }
 
        // Type 10: Technology
-       if (item.typeId === 10 && config.checkMissingRefs) {
-          if (data.Type < 0 || data.Type > 2) {
-             addError(item, `❌ Fatal: Technology has invalid Type (${data.Type}). Game will crash!`);
-          } else if (data.Type === 1) { 
-             if (!data.ItemId || data.ItemId === 0 || !ships.some(s => s.id === data.ItemId)) {
-                addError(item, `❌ Fatal: Technology (Type: Ship) ItemId (${data.ItemId}) not found in database.`);
-             }
-          } else if (data.Type === 2) { 
-             if (!data.ItemId || data.ItemId === 0 || !satellites.some(s => s.id === data.ItemId)) {
-                addError(item, `❌ Fatal: Technology (Type: Satellite) ItemId (${data.ItemId}) not found in database.`);
-             }
-          } else if (data.Type === 0) { 
-             if (!data.ItemId || data.ItemId === 0 || !componentsList.some(s => s.id === data.ItemId)) {
-                addError(item, `❌ Fatal: Technology (Type: Component) ItemId (${data.ItemId}) not found in database.`);
+       if (item.typeId === 10) {
+          checkEnumFatal(item, data, 'Type', 0, 2, 'Technology');
+          
+          if (config.checkMissingRefs) {
+             const techType = data.Type !== undefined ? data.Type : 0;
+             if (techType >= 0 && techType <= 2) {
+                 let targetDb = techType === 1 ? ships : techType === 2 ? satellites : componentsList;
+                 let targetTypeId = techType === 1 ? 6 : techType === 2 ? 7 : 1;
+                 
+                 if (data.ItemId === undefined || data.ItemId === null) {
+                     addError(item, `❌ Fatal: Technology ItemId is missing.`, addMissingIdFix(data, 'ItemId', 1));
+                 } else if (!targetDb.some(s => s.id === data.ItemId)) {
+                     addError(item, `❌ Fatal: Technology ItemId (${data.ItemId}) not found in database.`, addStubFix(targetTypeId, data.ItemId));
+                 }
              }
           }
        }
@@ -312,18 +373,14 @@ export function useValidator() {
        }
 
        if (data.Controller !== undefined) {
-          if (data.Controller.Type < 0 || data.Controller.Type > 6) {
-             addError(item, `❌ Fatal: BulletController has invalid Type (${data.Controller.Type}). Game will crash!`);
-          }
+          checkEnumFatal(item, data.Controller, 'Type', 0, 6, 'BulletController');
           checkClamp(item, data.Controller, 'StartingVelocityModifier', 0, 1000, 'Controller');
           checkClamp(item, data.Controller, 'Lifetime', 0, 3.4e38, 'Controller');
        }
 
        if (Array.isArray(data.Triggers)) {
           data.Triggers.forEach((t, i) => {
-             if (t.EffectType < 0 || t.EffectType > 5) {
-                addError(item, `❌ Fatal: BulletTrigger[${i}] has invalid EffectType (${t.EffectType}). Game will crash!`);
-             }
+             checkEnumFatal(item, t, 'EffectType', 0, 5, `BulletTrigger[${i}]`);
              checkClamp(item, t, 'Cooldown', 0, 1000, `Trigger[${i}]`);
              checkClamp(item, t, 'Size', 0, 100, `Trigger[${i}]`);
              checkClamp(item, t, 'Lifetime', 0, 1000, `Trigger[${i}]`);
@@ -355,9 +412,7 @@ export function useValidator() {
        }
 
        if (data.Type !== undefined && (data.ImageScale !== undefined || data.JointImageScale !== undefined || data.Thickness !== undefined)) {
-          if (data.Type < 0 || data.Type > 3) {
-             addError(item, `❌ Fatal: GameObjectPrefab has invalid Type (${data.Type}). Game will crash!`);
-          }
+          checkEnumFatal(item, data, 'Type', 0, 3, 'GameObjectPrefab');
           checkClamp(item, data, 'ImageScale', 0, 10, 'GameObjectPrefab');
           checkClamp(item, data, 'Thickness', 0, 1, 'GameObjectPrefab');
           checkClamp(item, data, 'AspectRatio', 0, 100, 'GameObjectPrefab');
@@ -477,17 +532,13 @@ export function useValidator() {
 
           if (Array.isArray(obj.Requirements)) {
              obj.Requirements.forEach((req) => {
-                if (req.Type === undefined || req.Type < 0 || req.Type > 21) {
-                   addError(item, `❌ Fatal (AI): BehaviorNodeRequirement has invalid Type ID (${req.Type}).`);
-                }
+                checkEnumFatal(item, req, 'Type', 0, 102, 'BehaviorNodeRequirement');
                 checkBehaviorNodes(req); 
              });
           }
 
           if (obj.Type !== undefined && (obj.Requirement !== undefined || obj.Nodes !== undefined || obj.Node !== undefined)) {
-             if (obj.Type < 0 || obj.Type > 83) {
-                addError(item, `❌ Fatal (AI): BehaviorTreeNode has invalid Type ID (${obj.Type}).`);
-             }
+             checkEnumFatal(item, obj, 'Type', 0, 310, 'BehaviorTreeNode');
              checkClamp(item, obj, 'Cooldown', 0, 3.4e38, `AI Node (Type ${obj.Type})`);
              
              if ([14, 22, 23, 28, 35, 40, 47, 61, 68, 71, 72].includes(obj.Type)) {
@@ -505,9 +556,8 @@ export function useValidator() {
           if (obj.RootNode) checkBehaviorNodes(obj.RootNode);
        };
        
-       if (data.Nodes || data.Requirements || data.RootNode) checkBehaviorNodes(data);
+       if (item.typeId === 28 && data.RootNode) checkBehaviorNodes(data.RootNode);
        if (data.CustomAI) checkBehaviorNodes(data.CustomAI);
-       if (data.BehaviorTree) checkBehaviorNodes(data.BehaviorTree);
        if (data.DefensiveDroneAI) checkBehaviorNodes(data.DefensiveDroneAI);
        if (data.OffensiveDroneAI) checkBehaviorNodes(data.OffensiveDroneAI);
        if (data.EnemyAI) checkBehaviorNodes(data.EnemyAI);

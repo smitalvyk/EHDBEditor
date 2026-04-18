@@ -195,9 +195,9 @@ const formatVal = (val) => {
            </div>
            
            <div class="title-area">
-              <h2>{{ parsedData.Name || fileName.replace('.json', '') }}</h2>
+            <h2>{{ parsedData.Name || fileName.replace('.json', '') }}</h2>
               <div class="tags">
-                 <span class="tag id-tag">ID: {{ parsedData.Id || 'N/A' }}</span>
+                 <span class="tag id-tag">ID: {{ parsedData.Id ?? 'N/A' }}</span>
                  <span class="tag type-tag">Type: {{ parsedData.ItemType !== undefined ? `${parsedData.ItemType} (${ItemTypeNames[parsedData.ItemType] || 'Unknown'})` : 'Unknown' }}</span>              
               </div>
               

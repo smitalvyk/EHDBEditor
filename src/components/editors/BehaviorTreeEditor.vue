@@ -6,10 +6,10 @@ const props = defineProps({
 });
 const emit = defineEmits(['update:modelValue']);
 
-// If RootNode doesn't exist yet, create a default structure
+// Проверяем, пустой ли объект ВООБЩЕ (а не просто отсутствие Type)
 const ensureRoot = () => {
-  if (!props.modelValue || !props.modelValue.Type) {
-    emit('update:modelValue', { Type: 'Selector', Nodes: [] });
+  if (!props.modelValue || Object.keys(props.modelValue).length === 0) {
+    emit('update:modelValue', { Type: 0 }); // 0 = Success
   }
 };
 ensureRoot();
@@ -19,8 +19,7 @@ const updateRoot = (newVal) => {
 };
 
 const deleteRoot = () => {
-  // Clear (can be set to null or reset if desired)
-  emit('update:modelValue', { Type: 'Selector', Nodes: [] });
+  emit('update:modelValue', {});
 };
 </script>
 
@@ -28,13 +27,13 @@ const deleteRoot = () => {
   <div class="bt-editor-wrapper">
     <div class="root-label">Root Node</div>
     <BehaviorNodeEditor 
-      v-if="modelValue && modelValue.Type"
+      v-if="modelValue && Object.keys(modelValue).length > 0"
       :modelValue="modelValue"
       @update:modelValue="updateRoot"
       @delete="deleteRoot"
     />
     <div v-else class="empty-root">
-      <button @click="ensureRoot">Create Root Node</button>
+      <button @click="ensureRoot" class="btn-action">Create Root Node</button>
     </div>
   </div>
 </template>
@@ -47,4 +46,6 @@ const deleteRoot = () => {
   font-size: 12px; font-weight: bold; color: var(--accent-color); margin-bottom: 5px;
 }
 .empty-root { padding: 20px; text-align: center; }
+.btn-action { background: rgba(255,255,255,0.1); border: 1px dashed var(--accent-color); color: var(--accent-color); padding: 8px 16px; border-radius: 4px; cursor: pointer;}
+.btn-action:hover { background: var(--accent-color); color: white; }
 </style>

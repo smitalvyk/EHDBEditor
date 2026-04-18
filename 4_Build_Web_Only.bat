@@ -5,18 +5,25 @@ echo   [1/2] Compiling Vue Application for Web...
 echo ===================================================
 call npm run build
 
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo [ERROR] Build failed! Files were not copied.
+    pause
+    exit /b %ERRORLEVEL%
+)
+
 echo.
 echo ===================================================
 echo   [OK] Build Successful! 
-echo   All production files are now inside the "dist" folder.
-echo   You can upload this folder to any web host.
 echo.
-echo   [2/2] Do you want to test the compiled web version right now?
-echo   Press any key to start the local preview server...
-echo   (Or just close this window if you only needed the files)
+echo   [2/2] Copying files to DBEditor_Web...
 echo ===================================================
-pause
+
+xcopy "dist\*" "..\DBEditor_Web\" /S /E /Y /I
 
 echo.
-echo Starting preview server... (Press Ctrl+C to stop)
-call npm run preview
+echo ===================================================
+echo   [SUCCESS] All files updated in DBEditor_Web!
+echo   Location: %~dp0..\DBEditor_Web
+echo ===================================================
+pause
