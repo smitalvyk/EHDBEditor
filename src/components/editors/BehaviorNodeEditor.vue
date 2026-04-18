@@ -28,7 +28,7 @@ const hierarchyColor = computed(() => {
 });
 
 // === TYPE DEFINITION ===
-// ИСПОЛЬЗУЕМ ?? 0 ЧТОБЫ ВОССТАНАВЛИВАТЬ НЕВИДИМЫЕ НУЛИ
+
 const typeName = computed(() => {
   const id = props.modelValue.Type ?? 0;
   return BehaviorNodeTypeMap[id] || String(id);
@@ -291,7 +291,7 @@ const updateRequirement = (v) => updateField('Requirement', v);
 </template>
 
 <style scoped>
-/* Стили остаются без изменений */
+
 .node-block { background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-light); border-left-width: 4px; padding: 10px; border-radius: 4px; display: flex; flex-direction: column; gap: 8px; width: 100%; transition: border-color 0.3s; }
 .node-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; margin-bottom: 4px; }
 .type-select-row { display: flex; gap: 10px; align-items: center; flex: 1; }

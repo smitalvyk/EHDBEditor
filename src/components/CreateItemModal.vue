@@ -72,7 +72,7 @@ watch(selectedType, () => {
   calculateNextId();
 });
 
-// Находим конфликтующий элемент для вывода его имени
+
 const conflictingItem = computed(() => {
   if (mode.value === 'folder') return null;
   const items = getItemsByType(selectedType.value);
@@ -90,7 +90,7 @@ const canCreate = computed(() => {
 const handleCreate = () => {
   if (!canCreate.value) return;
 
-  // Если выбран корень (пустая строка), не ставим слеш в начале
+
   const fullPath = directoryPath.value 
     ? (directoryPath.value.endsWith('/') ? `${directoryPath.value}${itemName.value}` : `${directoryPath.value}/${itemName.value}`)
     : itemName.value;

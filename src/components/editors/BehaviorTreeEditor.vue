@@ -6,7 +6,7 @@ const props = defineProps({
 });
 const emit = defineEmits(['update:modelValue']);
 
-// Проверяем, пустой ли объект ВООБЩЕ (а не просто отсутствие Type)
+
 const ensureRoot = () => {
   if (!props.modelValue || Object.keys(props.modelValue).length === 0) {
     emit('update:modelValue', { Type: 0 }); // 0 = Success

@@ -13,7 +13,7 @@ const updateField = (key, value) => {
 };
 
 // === TYPE DEFINITION ===
-// ИСПОЛЬЗУЕМ ?? 0 ЧТОБЫ ВОССТАНАВЛИВАТЬ НЕВИДИМЫЕ НУЛИ
+
 const typeName = computed(() => {
   const id = props.modelValue.Type ?? 0;
   return BehaviorRequirementTypeMap[id] || String(id);

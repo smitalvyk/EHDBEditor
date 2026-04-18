@@ -26,7 +26,7 @@ import BarrelsEditor from './BarrelsEditor.vue';
 import EnginesEditor from './EnginesEditor.vue';
 import ShipFeaturesEditor from './ShipFeaturesEditor.vue';
 import ShipVisualEffectsEditor from './ShipVisualEffectsEditor.vue';
-import LayoutInfo from './LayoutInfo.vue'; // <-- ДОБАВЛЕНО ИМПОРТ НОВОГО КОМПОНЕНТА
+import LayoutInfo from './LayoutInfo.vue';
 
 const props = defineProps({
   modelValue: { type: Object, default: () => ({}) },
@@ -47,10 +47,10 @@ const isShipStatsOpen = ref(false);
 const globalShipSettings = ref({});
 
 onMounted(() => {
-  // Пытаемся найти ItemType 100 (ShipSettings) в базе данных при открытии редактора
+
   const settingsItems = getItemsByType(100);
   if (settingsItems && settingsItems.length > 0) {
-    globalShipSettings.value = settingsItems[0].data; // Берем первый найденный файл настроек
+    globalShipSettings.value = settingsItems[0].data;
   }
 });
 
@@ -682,12 +682,12 @@ watch(() => props.modelValue, async (newVal) => {
 .title-row h3 { margin: 0; font-size: 18px; font-weight: 600; }
 .type-badge { background: #444; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
 
-/* КНОПКА SHIP STATS */
+
 .header-actions { display: flex; align-items: center; }
 .btn-stats { background: rgba(85, 170, 255, 0.1); color: #55aaff; border: 1px solid #55aaff; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s; display: flex; align-items: center; gap: 6px;}
 .btn-stats:hover { background: #55aaff; color: white; box-shadow: 0 0 8px rgba(85, 170, 255, 0.4);}
 
-/* СТИЛИ ДЛЯ МОДАЛКИ СТАТИСТИКИ */
+
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px); z-index: 2000; display: flex; align-items: center; justify-content: center; }
 .stats-modal { width: 95vw; max-width: 600px; height: auto; max-height: 90vh; background: var(--app-bg, #1e1e1e); border-radius: 12px; display: flex; flex-direction: column; border: 1px solid var(--border-light); overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }
 .modal-header { height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--border-light); background: var(--sidebar-bg, #252526); }
