@@ -17,6 +17,48 @@ const gridSize = ref(1);
 const gridData = ref([]);
 const currentBrush = ref('1');
 
+// === UNDO / REDO SYSTEM ===
+const history = ref([]);
+const historyIndex = ref(-1);
+const MAX_HISTORY = 5;
+
+const commitState = () => {
+  const currentState = gridData.value.join('');
+
+  if (historyIndex.value >= 0 && history.value[historyIndex.value] === currentState) return;
+  
+
+  const newHistory = history.value.slice(0, historyIndex.value + 1);
+  newHistory.push(currentState);
+  
+
+  if (newHistory.length > MAX_HISTORY + 1) {
+    newHistory.shift();
+  }
+  
+  history.value = newHistory;
+  historyIndex.value = history.value.length - 1;
+};
+
+const undo = () => {
+  if (canUndo.value) {
+    historyIndex.value--;
+    initGrid(history.value[historyIndex.value]);
+  }
+};
+
+const redo = () => {
+  if (canRedo.value) {
+    historyIndex.value++;
+    initGrid(history.value[historyIndex.value]);
+  }
+};
+
+const canUndo = computed(() => historyIndex.value > 0);
+const canRedo = computed(() => historyIndex.value < history.value.length - 1);
+// ==========================
+
+
 // MODES
 const isPanMode = ref(true); 
 const isDrawing = ref(false);
@@ -25,7 +67,7 @@ const isPanning = ref(false);
 const scrollWrapper = ref(null);
 let startX = 0, startY = 0, scrollL = 0, scrollT = 0;
 
-// PC DETECTION (Оставили для других возможных нужд, но фигуры теперь доступны всем)
+// PC DETECTION
 const isPC = ref(false);
 const enableDeviceCheck = ref(true); 
 
@@ -93,6 +135,11 @@ const openEditor = () => {
   isModalOpen.value = true;
   zoomLevel.value = 100;
   isPanMode.value = true;
+  
+
+  history.value = [];
+  historyIndex.value = -1;
+  commitState();
 };
 
 const saveEditor = () => {
@@ -122,6 +169,7 @@ const setGridSize = (delta) => {
 
   gridSize.value = newSize;
   gridData.value = newData;
+  commitState();
 };
 
 const containerPixelSize = computed(() => {
@@ -138,6 +186,7 @@ const shiftUp = () => {
     for (let x = 0; x < size; x++) { newData[(y - 1) * size + x] = gridData.value[y * size + x]; }
   }
   gridData.value = newData;
+  commitState();
 };
 const shiftDown = () => {
   const size = gridSize.value;
@@ -146,6 +195,7 @@ const shiftDown = () => {
     for (let x = 0; x < size; x++) { newData[(y + 1) * size + x] = gridData.value[y * size + x]; }
   }
   gridData.value = newData;
+  commitState();
 };
 const shiftLeft = () => {
   const size = gridSize.value;
@@ -154,6 +204,7 @@ const shiftLeft = () => {
     for (let x = 1; x < size; x++) { newData[y * size + (x - 1)] = gridData.value[y * size + x]; }
   }
   gridData.value = newData;
+  commitState();
 };
 const shiftRight = () => {
   const size = gridSize.value;
@@ -162,6 +213,7 @@ const shiftRight = () => {
     for (let x = 0; x < size - 1; x++) { newData[y * size + (x + 1)] = gridData.value[y * size + x]; }
   }
   gridData.value = newData;
+  commitState();
 };
 
 // SHAPE RASTERIZATION LOGIC
@@ -319,10 +371,21 @@ const getTouchCenter = (touches) => {
   return { x: (touches[0].clientX + touches[1].clientX) / 2, y: (touches[0].clientY + touches[1].clientY) / 2 };
 };
 
+const paintCellFromTouch = (clientX, clientY, brush) => {
+  const el = document.elementFromPoint(clientX, clientY);
+  if (el && el.dataset.index !== undefined) {
+    const index = Number(el.dataset.index);
+    if (!isNaN(index)) paintCell(index, brush);
+  }
+};
+
 const handleTouchStart = (e) => {
   if (e.touches.length === 2) {
     e.preventDefault();
-    isDrawing.value = false;
+    if (isDrawing.value) {
+       isDrawing.value = false;
+       commitState();
+    }
     initialPinchDist = getPinchDistance(e.touches);
     initialZoom = zoomLevel.value;
     const center = getTouchCenter(e.touches);
@@ -424,7 +487,10 @@ const doPan = (e) => {
 };
 
 const handleGlobalMouseUp = () => { 
-  isDrawing.value = false; 
+  if (isDrawing.value) {
+    isDrawing.value = false;
+    commitState();
+  }
   isPanning.value = false;
 };
 
@@ -434,6 +500,7 @@ onUnmounted(() => window.removeEventListener('mouseup', handleGlobalMouseUp));
 const onInputStringChange = (e) => {
   initGrid(e.target.value);
   emit('update:modelValue', gridData.value.join(''));
+  commitState();
 };
 </script>
 
@@ -490,6 +557,11 @@ const onInputStringChange = (e) => {
             <div class="modal-body layout-editor-container">
               
               <div class="toolbar">
+                <div class="toolbar-group">
+                  <button @click="undo" class="btn-tool" :disabled="!canUndo" title="Undo (Max 5)">↶</button>
+                  <button @click="redo" class="btn-tool" :disabled="!canRedo" title="Redo">↷</button>
+                </div>
+
                 <div class="toolbar-group">
                   <span class="size-label">{{ gridSize }}x{{ gridSize }}</span>
                   <button @click="setGridSize(-1)" class="btn-size" title="Decrease Size">-</button>
@@ -676,6 +748,9 @@ const onInputStringChange = (e) => {
 .btn-tool { height: 28px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: white; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 13px; transition: 0.2s; padding: 0 10px; font-weight: bold;}
 .btn-tool:hover { background: rgba(85, 170, 255, 0.3); border-color: #55aaff; }
 .btn-tool.active { background: #ffaa00; border-color: #ffaa00; color: #1e1e1e; }
+.btn-tool:disabled { opacity: 0.3; cursor: not-allowed; border-color: transparent; }
+.btn-tool:disabled:hover { background: rgba(255, 255, 255, 0.05); }
+
 .mode-btn { width: 70px; }
 .sym-btn { font-size: 11px; padding: 0 6px; }
 .tool-type-btn { font-size: 15px; padding: 0 8px; }

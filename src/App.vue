@@ -51,7 +51,7 @@ const newProjectName = ref('');
 
 // Modals State
 const isCreateModalOpen = ref(false);
-const contextMenuTarget = ref(null);
+const contextMenuTarget = ref(null); 
 const deleteTarget = ref(null);
 const deleteCount = ref(0);
 const activeCreatePath = ref('');
@@ -111,7 +111,7 @@ const openFileFromError = (err) => {
   }
 };
 
-// --- Context Menu & Delete Logic ---
+// Context Menu & Delete Logic
 const openContextMenu = (item) => {
   contextMenuTarget.value = item;
 };
@@ -124,13 +124,13 @@ const onContextCreate = () => {
        path = target.fullPath || target.name;
     } else {
        const parts = (target.fullPath || target.name).split('/');
-       parts.pop();
+       parts.pop(); 
        path = parts.join('/') || 'Database';
     }
   }
   activeCreatePath.value = path;
   isCreateModalOpen.value = true;
-  contextMenuTarget.value = null;
+  contextMenuTarget.value = null; 
 };
 
 const countFilesInside = (node) => {
@@ -145,7 +145,7 @@ const countFilesInside = (node) => {
 const onContextDelete = () => {
   deleteTarget.value = contextMenuTarget.value;
   deleteCount.value = countFilesInside(contextMenuTarget.value);
-  contextMenuTarget.value = null;
+  contextMenuTarget.value = null; 
 };
 
 const executeDelete = async () => {
@@ -243,7 +243,6 @@ const currentFolderSuggestion = computed(() => {
   if (selectedFile.value.kind === 'file') parts.pop();
   return parts.join('/') || 'Database';
 });
-
 
 const openCreateModalGlobal = () => {
   activeCreatePath.value = currentFolderSuggestion.value;
@@ -423,10 +422,33 @@ const startLongPress = () => startLongPressTimer(() => { isSettingsOpen.value = 
 const isDark = ref(localStorage.getItem('theme') !== 'light');
 const showEditorNotes = ref(localStorage.getItem('showEditorNotes') !== 'false');
 const sortJsonOnSave = ref(localStorage.getItem('sortJsonOnSave') !== 'false');
+const isFullscreen = ref(false);
 
 watch(isDark, (val) => { localStorage.setItem('theme', val ? 'dark' : 'light'); updateThemeClass(); });
 watch(showEditorNotes, (val) => { localStorage.setItem('showEditorNotes', val); });
 watch(sortJsonOnSave, (val) => { localStorage.setItem('sortJsonOnSave', val); });
+
+// Fullscreen Logic
+watch(isFullscreen, async (newVal) => {
+  try {
+    if (newVal && !document.fullscreenElement) {
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      } else if (document.documentElement.webkitRequestFullscreen) { 
+        await document.documentElement.webkitRequestFullscreen();
+      }
+    } else if (!newVal && document.fullscreenElement) {
+      if (document.exitFullscreen) {
+        await document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        await document.webkitExitFullscreen();
+      }
+    }
+  } catch (err) {
+    console.error("Fullscreen toggle failed:", err);
+    isFullscreen.value = !newVal; 
+  }
+});
 
 // Search State
 const searchQuery = ref('');
@@ -727,6 +749,13 @@ const handleSelectFile = async (fileNode) => {
 onMounted(async () => { 
   updateThemeClass(); 
   setupConsoleInterceptor();
+
+  document.addEventListener('fullscreenchange', () => {
+    isFullscreen.value = !!document.fullscreenElement;
+  });
+  document.addEventListener('webkitfullscreenchange', () => {
+    isFullscreen.value = !!document.webkitFullscreenElement;
+  });
 
   try {
     const existingFiles = await getAllFilesFromDB();
@@ -1037,6 +1066,13 @@ const toggleSidebar = () => { isSidebarOpen.value = !isSidebarOpen.value; };
               <span>Sort JSON by schema</span>
               <div class="toggle-switch">
                 <input type="checkbox" v-model="sortJsonOnSave">
+                <span class="slider"></span>
+              </div>
+            </label>
+            <label class="setting-item cursor-pointer">
+              <span>Fullscreen Mode</span>
+              <div class="toggle-switch">
+                <input type="checkbox" v-model="isFullscreen">
                 <span class="slider"></span>
               </div>
             </label>

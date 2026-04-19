@@ -32,7 +32,7 @@ const getEffectiveArc = (item) => {
   }
 };
 
-// Вычисляем визуальный угол (угол * 2, ограничиваем до 360)
+
 const getVisualArc = (item) => {
   return Math.min(360, getEffectiveArc(item) * 2);
 };
@@ -51,8 +51,8 @@ const getArcPath = (arcAngle) => {
 
   const largeArcFlag = arcAngle > 180 ? 1 : 0;
 
-  // ИСПРАВЛЕНИЕ: Последний ноль перед ${x2} — это sweep-flag. 
-  // Мы поменяли 1 на 0, чтобы дуга рисовалась правильно (не пересекаясь).
+
+
   return `M 0 0 L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArcFlag} 0 ${x2} ${y2} Z`;
 };
 
