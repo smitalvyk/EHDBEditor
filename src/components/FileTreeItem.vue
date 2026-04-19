@@ -5,7 +5,7 @@ const props = defineProps({
   item: { type: Object, required: true }
 });
 
-const emit = defineEmits(['select', 'delete-request']);
+const emit = defineEmits(['select', 'item-context']);
 
 const toggleFolder = () => {
   if (props.item.kind === 'directory') {
@@ -29,8 +29,8 @@ const startPress = (e) => {
   if (e.button !== undefined && e.button !== 0) return;
   
   pressTimer = setTimeout(() => {
-    emit('delete-request', props.item);
-  }, 2000); // 2000ms = 2 seconds. Change to 5000 for 5 seconds.
+    emit('item-context', props.item);
+  }, 2000);
 };
 
 const cancelPress = () => {
@@ -69,7 +69,7 @@ const cancelPress = () => {
         :key="child.name" 
         :item="child" 
         @select="$emit('select', $event)"
-        @delete-request="$emit('delete-request', $event)"
+        @item-context="$emit('item-context', $event)"
       />
     </div>
   </div>

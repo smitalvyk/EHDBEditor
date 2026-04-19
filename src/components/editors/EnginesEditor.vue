@@ -67,7 +67,7 @@ const removeEngine = (idx) => {
                 <line x1="0" y1="-1" x2="0" y2="1" stroke="#00ff00" stroke-width="0.01" stroke-dasharray="0.05, 0.05" opacity="0.8"/>
                 
                 <g v-for="(item, idx) in modelValue" :key="idx"
-                  :transform="`translate(${clampPos(item.Position?.y)}, ${clampPos(item.Position?.x)})`">
+                  :transform="`translate(${-clampPos(item.Position?.y)}, ${clampPos(item.Position?.x)})`">
                   <circle cx="0" cy="0" :r="Math.max(0.01, (item.Size ?? 0.5) * 0.15)" fill="rgba(255, 255, 0, 0.6)" stroke="#ffcc00" stroke-width="0.01" />
                 </g>
               </g>
@@ -119,11 +119,11 @@ const removeEngine = (idx) => {
 
 .barrel-preview-container { display: flex; justify-content: center; width: 100%; }
 
-/* ИСПРАВЛЕНИЕ: Делаем фон резиновым, но строго квадратным */
+
 .barrel-preview-bg { 
   width: 100%; 
   max-width: 640px; 
-  aspect-ratio: 1 / 1; /* Всегда квадрат! */
+  aspect-ratio: 1 / 1;
   background-color: #607d8b; 
   border-radius: 4px; 
   display: flex; 
@@ -131,11 +131,11 @@ const removeEngine = (idx) => {
   align-items: center; 
 }
 
-/* ИСПРАВЛЕНИЕ: Внутренний контейнер тоже строго квадратный и зависит от родителя */
+
 .preview-content-wrapper { 
   position: relative; 
-  width: 62.5%; /* Это ровно 400px от 640px, сохраняет нужный отступ */
-  aspect-ratio: 1 / 1; /* Всегда квадрат! */
+  width: 62.5%;
+  aspect-ratio: 1 / 1;
   border: 1px solid rgba(0,0,0,0.5); 
   display: flex; 
   justify-content: center; 

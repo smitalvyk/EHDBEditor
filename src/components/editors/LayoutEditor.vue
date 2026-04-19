@@ -25,7 +25,7 @@ const isPanning = ref(false);
 const scrollWrapper = ref(null);
 let startX = 0, startY = 0, scrollL = 0, scrollT = 0;
 
-// PC DETECTION & CHECK TOGGLE
+// PC DETECTION (Оставили для других возможных нужд, но фигуры теперь доступны всем)
 const isPC = ref(false);
 const enableDeviceCheck = ref(true); 
 
@@ -274,7 +274,7 @@ const onGridMouseDown = (e) => {
     isDrawing.value = true; 
     drawingBrush = (e.button === 2) ? '0' : currentBrush.value;
 
-    if (isPC.value && currentTool.value !== 'brush') {
+    if (currentTool.value !== 'brush') {
       shapeStartX = index % gridSize.value;
       shapeStartY = Math.floor(index / gridSize.value);
       backupGrid.value = [...gridData.value];
@@ -293,7 +293,7 @@ const onGridMouseMove = (e) => {
   if (target.classList.contains('grid-cell')) {
     const index = Number(target.dataset.index);
     
-    if (isPC.value && currentTool.value !== 'brush') {
+    if (currentTool.value !== 'brush') {
       const x = index % gridSize.value;
       const y = Math.floor(index / gridSize.value);
       updateShapePreview(shapeStartX, shapeStartY, x, y, drawingBrush);
@@ -319,14 +319,6 @@ const getTouchCenter = (touches) => {
   return { x: (touches[0].clientX + touches[1].clientX) / 2, y: (touches[0].clientY + touches[1].clientY) / 2 };
 };
 
-const paintCellFromTouch = (clientX, clientY, brush) => {
-  const el = document.elementFromPoint(clientX, clientY);
-  if (el && el.dataset.index !== undefined) {
-    const index = Number(el.dataset.index);
-    if (!isNaN(index)) paintCell(index, brush);
-  }
-};
-
 const handleTouchStart = (e) => {
   if (e.touches.length === 2) {
     e.preventDefault();
@@ -343,7 +335,24 @@ const handleTouchStart = (e) => {
     e.preventDefault(); 
     isDrawing.value = true;
     drawingBrush = currentBrush.value;
-    paintCellFromTouch(e.touches[0].clientX, e.touches[0].clientY, drawingBrush);
+    
+    const clientX = e.touches[0].clientX;
+    const clientY = e.touches[0].clientY;
+    const el = document.elementFromPoint(clientX, clientY);
+    
+    if (el && el.dataset.index !== undefined) {
+      const index = Number(el.dataset.index);
+      
+      if (currentTool.value !== 'brush') {
+        shapeStartX = index % gridSize.value;
+        shapeStartY = Math.floor(index / gridSize.value);
+        backupGrid.value = [...gridData.value];
+        previousShapeIndices = [];
+        updateShapePreview(shapeStartX, shapeStartY, shapeStartX, shapeStartY, drawingBrush);
+      } else {
+        paintCell(index, drawingBrush);
+      }
+    }
   }
 };
 
@@ -368,7 +377,21 @@ const handleTouchMove = (e) => {
 
   if (!isPanMode.value && isDrawing.value) {
     e.preventDefault(); 
-    paintCellFromTouch(e.touches[0].clientX, e.touches[0].clientY, drawingBrush);
+    
+    const clientX = e.touches[0].clientX;
+    const clientY = e.touches[0].clientY;
+    const el = document.elementFromPoint(clientX, clientY);
+    
+    if (el && el.dataset.index !== undefined) {
+      const index = Number(el.dataset.index);
+      if (currentTool.value !== 'brush') {
+        const x = index % gridSize.value;
+        const y = Math.floor(index / gridSize.value);
+        updateShapePreview(shapeStartX, shapeStartY, x, y, drawingBrush);
+      } else {
+        paintCell(index, drawingBrush);
+      }
+    }
   }
 };
 
@@ -495,7 +518,7 @@ const onInputStringChange = (e) => {
                   <button @click="isSymmetryY = !isSymmetryY" class="btn-tool sym-btn" :class="{ active: isSymmetryY }" title="Mirror Top/Bottom">Sym Y</button>
                 </div>
 
-                <div class="toolbar-group" v-if="isPC && !isPanMode">
+                <div class="toolbar-group" v-if="!isPanMode">
                   <button @click="currentTool = 'brush'" class="btn-tool tool-type-btn" :class="{ active: currentTool === 'brush' }" title="Brush">✎</button>
                   <button @click="currentTool = 'square'" class="btn-tool tool-type-btn" :class="{ active: currentTool === 'square' }" title="Square Box">■</button>
                   <button @click="currentTool = 'circle'" class="btn-tool tool-type-btn" :class="{ active: currentTool === 'circle' }" title="Circle">●</button>
@@ -560,6 +583,9 @@ const onInputStringChange = (e) => {
 
                   <div class="grid-container" :style="{ width: containerPixelSize, height: containerPixelSize }">
                     
+                    <div v-if="isSymmetryX && !isPanMode" class="sym-line-vertical"></div>
+                    <div v-if="isSymmetryY && !isPanMode" class="sym-line-horizontal"></div>
+
                     <img v-if="backgroundImage" :src="backgroundImage" class="bg-image" />
                     
                     <div 
@@ -614,10 +640,10 @@ const onInputStringChange = (e) => {
 .mini-grid-wrapper { position: relative; width: 150px; height: 150px; overflow: hidden; border-radius: 4px; }
 .mini-bg-image { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; transform: rotate(-90deg); z-index: 1; opacity: 0.5; pointer-events: none; }
 
-/* ИСПРАВЛЕНИЕ: Добавлен gap: 1px для создания прозрачных рамок между блоками */
+
 .mini-grid { position: relative; width: 100%; height: 100%; z-index: 2; display: grid; gap: 1px; background: transparent; pointer-events: none; }
 
-/* ИСПРАВЛЕНИЕ: Добавлена GPU-ускоренная тень для разметки пустых ячеек */
+
 .mini-cell { width: 100%; height: 100%; box-sizing: border-box; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05); }
 
 .string-preview { width: 100%; }
@@ -698,11 +724,16 @@ const onInputStringChange = (e) => {
 .r-cell-left .r-mark-1 { width: 3px; height: 1px; }
 
 .grid-container { position: relative; display: block; }
+
+/* SYMMETRY LINES */
+.sym-line-vertical { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; background: #ffaa00; transform: translateX(-50%); pointer-events: none; z-index: 10; box-shadow: 0 0 4px #000; opacity: 0.8; }
+.sym-line-horizontal { position: absolute; left: 0; right: 0; top: 50%; height: 2px; background: #ffaa00; transform: translateY(-50%); pointer-events: none; z-index: 10; box-shadow: 0 0 4px #000; opacity: 0.8; }
+
 .bg-image { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: fill; transform: rotate(-90deg); z-index: 1; opacity: 0.8; pointer-events: none; }
 .drawing-grid { position: relative; width: 100%; height: 100%; z-index: 2; display: grid; gap: 1px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.2); box-sizing: border-box; touch-action: none; }
 .is-pan-mode .drawing-grid { touch-action: auto; }
 
-/* ИСПРАВЛЕНИЕ: Заменен тяжелый border: dashed на быструю внутреннюю тень */
+
 .grid-cell { width: 100%; height: 100%; cursor: crosshair; user-select: none; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15); box-sizing: border-box; transition: box-shadow 0.1s; }
 .grid-cell:hover { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.8); }
 

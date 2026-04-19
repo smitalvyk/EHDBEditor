@@ -32,6 +32,11 @@ const getEffectiveArc = (item) => {
   }
 };
 
+// Вычисляем визуальный угол (угол * 2, ограничиваем до 360)
+const getVisualArc = (item) => {
+  return Math.min(360, getEffectiveArc(item) * 2);
+};
+
 const getArcPath = (arcAngle) => {
   if (arcAngle <= 0 || arcAngle >= 360) return '';
   
@@ -46,7 +51,9 @@ const getArcPath = (arcAngle) => {
 
   const largeArcFlag = arcAngle > 180 ? 1 : 0;
 
-  return `M 0 0 L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
+  // ИСПРАВЛЕНИЕ: Последний ноль перед ${x2} — это sweep-flag. 
+  // Мы поменяли 1 на 0, чтобы дуга рисовалась правильно (не пересекаясь).
+  return `M 0 0 L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArcFlag} 0 ${x2} ${y2} Z`;
 };
 
 // === ARRAY MANAGEMENT ===
@@ -116,14 +123,14 @@ const removeBarrel = (idx) => {
                 <line x1="0" y1="-1" x2="0" y2="1" stroke="#00ff00" stroke-width="0.01" stroke-dasharray="0.05, 0.05" opacity="0.8"/>
 
                 <g v-for="(item, idx) in modelValue" :key="idx"
-                  :transform="`translate(${clampPos(item.Position?.y)}, ${clampPos(item.Position?.x)}) rotate(${item.Rotation ?? 0})`">
+                  :transform="`translate(${-clampPos(item.Position?.y)}, ${clampPos(item.Position?.x)}) rotate(${item.Rotation ?? 0})`">
                   <g transform="scale(0.6)">
                     
-                    <path v-if="getEffectiveArc(item) > 0 && getEffectiveArc(item) < 360"
-                          :d="getArcPath(getEffectiveArc(item))"
-                          fill="rgba(255, 170, 0, 0.3)" stroke="#ffaa00" stroke-width="0.015" />
+                    <path v-if="getVisualArc(item) > 0 && getVisualArc(item) < 360"
+                          :d="getArcPath(getVisualArc(item))"
+                          fill="rgba(255, 170, 0, 0.3)" stroke="#ffaa00" stroke-width="0.015" stroke-linejoin="round" />
                           
-                    <circle v-if="getEffectiveArc(item) >= 360"
+                    <circle v-if="getVisualArc(item) >= 360"
                             cx="0" cy="0" r="0.5" 
                             fill="rgba(255, 170, 0, 0.3)" stroke="#ffaa00" stroke-width="0.015" />
 

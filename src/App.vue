@@ -48,10 +48,13 @@ const isScanning = ref(false);
 const isSidebarOpen = ref(false); 
 const isProjectModalOpen = ref(false);
 const newProjectName = ref('');
-const isCreateModalOpen = ref(false);
 
+// Modals State
+const isCreateModalOpen = ref(false);
+const contextMenuTarget = ref(null);
 const deleteTarget = ref(null);
 const deleteCount = ref(0);
+const activeCreatePath = ref('');
 
 // ZIP State
 const isZipMode = ref(false);
@@ -108,6 +111,28 @@ const openFileFromError = (err) => {
   }
 };
 
+// --- Context Menu & Delete Logic ---
+const openContextMenu = (item) => {
+  contextMenuTarget.value = item;
+};
+
+const onContextCreate = () => {
+  let path = 'Database';
+  if (contextMenuTarget.value) {
+    const target = contextMenuTarget.value;
+    if (target.kind === 'directory') {
+       path = target.fullPath || target.name;
+    } else {
+       const parts = (target.fullPath || target.name).split('/');
+       parts.pop();
+       path = parts.join('/') || 'Database';
+    }
+  }
+  activeCreatePath.value = path;
+  isCreateModalOpen.value = true;
+  contextMenuTarget.value = null;
+};
+
 const countFilesInside = (node) => {
   if (node.kind === 'file') return 1;
   let count = 0;
@@ -117,9 +142,10 @@ const countFilesInside = (node) => {
   return count;
 };
 
-const requestDelete = (item) => {
-  deleteTarget.value = item;
-  deleteCount.value = countFilesInside(item);
+const onContextDelete = () => {
+  deleteTarget.value = contextMenuTarget.value;
+  deleteCount.value = countFilesInside(contextMenuTarget.value);
+  contextMenuTarget.value = null;
 };
 
 const executeDelete = async () => {
@@ -217,6 +243,12 @@ const currentFolderSuggestion = computed(() => {
   if (selectedFile.value.kind === 'file') parts.pop();
   return parts.join('/') || 'Database';
 });
+
+
+const openCreateModalGlobal = () => {
+  activeCreatePath.value = currentFolderSuggestion.value;
+  isCreateModalOpen.value = true;
+};
 
 const availableDirectories = computed(() => {
   const dirs = [''];
@@ -878,7 +910,7 @@ const toggleSidebar = () => { isSidebarOpen.value = !isSidebarOpen.value; };
                 <span class="slider"></span>
               </div>
             </label>
-            <button class="btn-icon add-btn" @click="isCreateModalOpen = true" title="New File/Folder" :disabled="!rootHandle">➕</button>
+            <button class="btn-icon add-btn" @click="openCreateModalGlobal" title="New File/Folder" :disabled="!rootHandle">➕</button>
           </div>
         </div>
 
@@ -889,7 +921,7 @@ const toggleSidebar = () => { isSidebarOpen.value = !isSidebarOpen.value; };
             :key="item.name" 
             :item="item" 
             @select="handleSelectFile" 
-            @delete-request="requestDelete"
+            @item-context="openContextMenu"
           />
         </div>
         <div v-else class="empty-state">{{ searchQuery ? 'No results found' : 'No files' }}</div>
@@ -915,7 +947,7 @@ const toggleSidebar = () => { isSidebarOpen.value = !isSidebarOpen.value; };
 
     <CreateItemModal 
       :isOpen="isCreateModalOpen" 
-      :currentPath="currentFolderSuggestion"
+      :currentPath="activeCreatePath"
       :directories="availableDirectories"
       @close="isCreateModalOpen = false" 
       @create="handleCreateNewItem" 
@@ -1008,6 +1040,17 @@ const toggleSidebar = () => { isSidebarOpen.value = !isSidebarOpen.value; };
                 <span class="slider"></span>
               </div>
             </label>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="contextMenuTarget" class="modal-overlay" @click.self="contextMenuTarget = null">
+        <div class="mini-confirm-card" style="border-color: var(--accent-color);">
+          <h4 style="color: var(--accent-color);">{{ contextMenuTarget.name }}</h4>
+          <div class="context-menu-actions" style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
+             <button class="btn-primary" @click="onContextCreate" style="padding: 10px; justify-content: flex-start;">➕ Create New Inside</button>
+             <button class="btn-danger" @click="onContextDelete" style="padding: 10px; justify-content: flex-start;">🗑️ Delete</button>
+             <button class="btn-secondary" @click="contextMenuTarget = null" style="padding: 10px; justify-content: flex-start;">Cancel</button>
           </div>
         </div>
       </div>
