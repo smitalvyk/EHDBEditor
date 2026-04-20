@@ -195,6 +195,17 @@ const getItemDisplayName = (item) => {
   return item.name;
 };
 
+// === DYNAMIC TECH TARGET LOGIC ===
+const getRefTargetType = (key, fieldDef, data) => {
+  if (key === 'ItemId' && fieldDef.targetType === 'DYNAMIC_TECH') {
+    const techType = data.Type ?? 0;
+    if (techType === 0) return 1; // Component
+    if (techType === 1) return 6; // Ship
+    if (techType === 2) return 7; // Satellite
+  }
+  return fieldDef.targetType;
+};
+
 // === TAG AND REFERENCE LOGIC ===
 const addToArray = (key, value) => {
   const currentArray = props.modelValue[key] ? [...props.modelValue[key]] : [];
@@ -314,7 +325,7 @@ const resolveImageUrl = async (fileName, fieldName, currentItemType) => {
   let foundKey = null;
 
   if (currentItemType === 6) {
-    if (fieldName === 'ModelImage') {
+    if (fieldName === 'ModelImage' || fieldName === 'Image') {
       foundKey = Object.keys(allLocalSprites).find(key => 
         key.toLowerCase().includes('/ships/') && key.toLowerCase().endsWith(`/${nameLower}`)
       );
@@ -330,6 +341,46 @@ const resolveImageUrl = async (fileName, fieldName, currentItemType) => {
   return `/sprites/${nameToFind}`;
 };
 
+// === TAG IMAGE LOADING LOGIC ===
+const tagImagesCache = ref({});
+
+const loadTagImage = async (targetType, itemId) => {
+  const cacheKey = `${targetType}_${itemId}`;
+  if (tagImagesCache.value[cacheKey] !== undefined) return; 
+
+  tagImagesCache.value[cacheKey] = null; 
+
+  const item = getItemsByType(targetType)?.find(i => i.id === itemId);
+  if (!item || !item.data) return;
+
+  let imgName = null;
+  let checkType = targetType;
+
+  if (targetType === 10) {
+
+    const techType = item.data.Type ?? 0;
+    const targetTargetId = item.data.ItemId;
+    let unlockType = 1; // Component by default
+    if (techType === 1) unlockType = 6; // Ship
+    else if (techType === 2) unlockType = 7; // Satellite
+
+    const unlockedItem = getItemsByType(unlockType)?.find(i => i.id === targetTargetId);
+    if (unlockedItem && unlockedItem.data) {
+      imgName = unlockedItem.data.IconImage || unlockedItem.data.ModelImage || unlockedItem.data.Icon || unlockedItem.data.Image;
+      checkType = unlockType;
+    }
+    
+    if (!imgName) imgName = 'tech_icon';
+  } else {
+    imgName = item.data.IconImage || item.data.ModelImage || item.data.Icon || item.data.Image || item.data.ControlButtonIcon;
+  }
+
+  if (imgName) {
+    const url = await resolveImageUrl(imgName, checkType === 6 ? 'IconImage' : '', checkType);
+    tagImagesCache.value[cacheKey] = url;
+  }
+};
+
 watch(() => props.modelValue, async (newVal) => {
   if (!schema.value.fields) return;
 
@@ -340,8 +391,14 @@ watch(() => props.modelValue, async (newVal) => {
 
   for (const [key, val] of Object.entries(newVal)) {
     const fieldDef = schema.value.fields[key];
+    
     if (fieldDef && fieldDef.type === FieldType.IMAGE) {
       imagePreviews.value[key] = await resolveImageUrl(val, key, props.itemType);
+    }
+    
+
+    if (fieldDef && fieldDef.type === FieldType.TAG_LIST && Array.isArray(val)) {
+      val.forEach(itemId => loadTagImage(fieldDef.targetType, itemId));
     }
   }
 }, { deep: true, immediate: true });
@@ -492,8 +549,13 @@ watch(() => props.modelValue, async (newVal) => {
 
               <template v-else>
                 <div v-for="(itemId, idx) in val" :key="idx" class="tag-item">
-                  <span class="tag-text">{{ getNameForTag(schema.fields[key].targetType, itemId) }}</span>
-                  <span class="tag-id">#{{ itemId }}</span>
+                  <div class="tag-left">
+                     <img v-if="tagImagesCache[`${schema.fields[key].targetType}_${itemId}`]" 
+                          :src="tagImagesCache[`${schema.fields[key].targetType}_${itemId}`]" 
+                          class="tag-thumb" />
+                     <span class="tag-text">{{ getNameForTag(schema.fields[key].targetType, itemId) }}</span>
+                     <span class="tag-id">#{{ itemId }}</span>
+                  </div>
                   <button @click="removeFromArray(key, idx)" class="tag-remove">×</button>
                 </div>
               </template>
@@ -551,17 +613,16 @@ watch(() => props.modelValue, async (newVal) => {
               class="win-input ref-input"
               title="Manual ID Input"
             >
-            
             <select :value="val" @change="e => updateField(key, typeof val === 'string' ? e.target.value : Number(e.target.value))" class="win-input ref-select">
               <option :value="0">[NONE]</option>
-              <option v-if="val !== 0 && !getItemsByType(schema.fields[key].targetType)?.some(i => i.id === val)" :value="val">
+              <option v-if="val !== 0 && !getItemsByType(getRefTargetType(key, schema.fields[key], modelValue))?.some(i => i.id === val)" :value="val">
                 ID: {{ val }} (Not Found)
               </option>
-              <option v-for="item in getItemsByType(schema.fields[key].targetType)" :key="item.id" :value="item.id">
+              <option v-for="item in getItemsByType(getRefTargetType(key, schema.fields[key], modelValue))" :key="item.id" :value="item.id">
                 [ID: {{ item.id }}] {{ getItemDisplayName(item) }} — 📂 {{ item.filePath }}
               </option>
             </select>
-            </div>
+          </div>
 
           <div v-else-if="schema.fields?.[key]?.type === FieldType.VECTOR" class="vector-group">
             <div class="vec-item">
@@ -688,9 +749,11 @@ watch(() => props.modelValue, async (newVal) => {
 .title-row h3 { margin: 0; font-size: 18px; font-weight: 600; }
 .type-badge { background: #444; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
 
+
 .header-actions { display: flex; align-items: center; }
 .btn-stats { background: rgba(85, 170, 255, 0.1); color: #55aaff; border: 1px solid #55aaff; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s; display: flex; align-items: center; gap: 6px;}
 .btn-stats:hover { background: #55aaff; color: white; box-shadow: 0 0 8px rgba(85, 170, 255, 0.4);}
+
 
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px); z-index: 2000; display: flex; align-items: center; justify-content: center; }
 .stats-modal { width: 95vw; max-width: 600px; height: auto; max-height: 90vh; background: var(--app-bg, #1e1e1e); border-radius: 12px; display: flex; flex-direction: column; border: 1px solid var(--border-light); overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }
@@ -785,6 +848,28 @@ watch(() => props.modelValue, async (newVal) => {
 .mod-ext-body { display: flex; flex-direction: column; gap: 4px; padding-top: 4px;}
 .mod-ext-stat { font-family: monospace; font-size: 11px; color: var(--text-primary); opacity: 0.9; }
 
+/* === TAG ITEM THUMBNAIL STYLES === */
+.tags-container.vertical-list { flex-direction: column; gap: 4px; background: transparent; padding: 0; }
+.tags-container.vertical-list .tag-item { 
+  background: rgba(255, 255, 255, 0.05); 
+  border: 1px solid rgba(255, 255, 255, 0.1); 
+  color: var(--text-primary); 
+  box-shadow: none; 
+  justify-content: space-between; 
+  padding: 6px 10px; 
+  display: flex; 
+  align-items: center;
+  border-radius: 6px;
+}
+.tags-container.vertical-list .tag-item:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.2); transform: none; }
+.tag-left { display: flex; align-items: center; gap: 8px; }
+.tag-thumb { width: 22px; height: 22px; object-fit: contain; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.5)); }
+
+.tags-container.vertical-list .tag-id { color: var(--text-secondary); opacity: 0.5; }
+.tags-container.vertical-list .tag-remove { color: var(--text-secondary); opacity: 0.6; background: transparent; border: none; font-size: 16px; cursor: pointer; }
+.tags-container.vertical-list .tag-remove:hover { color: #ff5555; opacity: 1; }
+
+
 .image-group { width: 100%; display: flex; flex-direction: column; gap: 8px; }
 .image-input-row { width: 100%; }
 .image-preview-box { background: rgba(0, 0, 0, 0.2); border-radius: 6px; padding: 10px; display: flex; justify-content: center; align-items: center; border: 1px solid var(--border-light); min-height: 40px; }
@@ -807,7 +892,6 @@ watch(() => props.modelValue, async (newVal) => {
 .color-picker { width: 28px; height: 28px; border: none; background: none; cursor: pointer; padding: 0; border-radius: 50%; overflow: hidden; }
 .color-text { font-family: monospace; }
 
-/* REFERENCE GROUP STYLES */
 .ref-group { width: 100%; display: flex; align-items: center; gap: 10px; }
 .ref-input { width: 80px; flex-shrink: 0; text-align: center; font-family: monospace; font-size: 13px; font-weight: bold; color: var(--accent-color); }
 .ref-select { flex: 1; }
@@ -839,13 +923,6 @@ input:checked + .slider:before { transform: translateX(14px); }
 .chip-add { background: transparent; border: 1px solid var(--border-light); color: var(--text-secondary); padding: 6px 12px; border-radius: 20px; cursor: pointer; font-size: 12px; transition: all 0.2s; }
 .chip-add:hover { border-color: var(--accent-color); color: var(--accent-color); background: rgba(var(--accent-color), 0.05); }
 
-.tags-container.vertical-list { flex-direction: column; gap: 4px; background: transparent; padding: 0; }
-.tags-container.vertical-list .tag-item { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text-primary); box-shadow: none; justify-content: space-between; padding: 6px 10px; }
-.tags-container.vertical-list .tag-item:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.2); transform: none; }
-.tags-container.vertical-list .tag-id { color: var(--text-secondary); opacity: 0.5; }
-.tags-container.vertical-list .tag-remove { color: var(--text-secondary); opacity: 0.6; }
-.tags-container.vertical-list .tag-remove:hover { color: #ff5555; opacity: 1; }
-
 .note-block { border-left: 3px solid #ffaa00 !important; background: rgba(255, 170, 0, 0.05) !important; }
 .note-textarea { width: 100%; min-height: 60px; resize: vertical; font-family: inherit; font-size: 13px; line-height: 1.4; padding: 10px; }
 .input-with-warning { width: 100%; position: relative; display: flex; flex-direction: column; gap: 4px; }
@@ -857,38 +934,12 @@ input:checked + .slider:before { transform: translateX(14px); }
   to { opacity: 1; }
 }
 
-/* === RESPONSIVE (MOBILE) STYLES === */
 @media (max-width: 600px) {
-  .editor-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .property-row {
-    padding: 10px;
-  }
-
-  .label-text {
-    font-size: 14px;
-  }
-  
-  .property-row.full-width-block .prop-label {
-      width: 100%;
-  }
-
-  /* Stack the elements inside the reference group for better visibility */
-  .ref-group {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 5px; 
-  }
-
-  /* Make the input and select take up the full width */
-  .ref-input,
-  .ref-select {
-    width: 100% !important; 
-    box-sizing: border-box; 
-  }
+  .editor-header { flex-direction: column; align-items: stretch; gap: 10px; }
+  .property-row { padding: 10px; }
+  .label-text { font-size: 14px; }
+  .property-row.full-width-block .prop-label { width: 100%; }
+  .ref-group { flex-direction: column; align-items: flex-start; gap: 5px; }
+  .ref-input, .ref-select { width: 100% !important; box-sizing: border-box; }
 }
 </style>

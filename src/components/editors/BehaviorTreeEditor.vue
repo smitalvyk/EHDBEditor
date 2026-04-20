@@ -26,22 +26,54 @@ const deleteRoot = () => {
 <template>
   <div class="bt-editor-wrapper">
     <div class="root-label">Root Node</div>
-    <BehaviorNodeEditor 
-      v-if="modelValue && Object.keys(modelValue).length > 0"
-      :modelValue="modelValue"
-      @update:modelValue="updateRoot"
-      @delete="deleteRoot"
-    />
-    <div v-else class="empty-root">
-      <button @click="ensureRoot" class="btn-action">Create Root Node</button>
+    
+    <div class="bt-scroll-area">
+      <BehaviorNodeEditor 
+        v-if="modelValue && Object.keys(modelValue).length > 0"
+        :modelValue="modelValue"
+        @update:modelValue="updateRoot"
+        @delete="deleteRoot"
+      />
+      <div v-else class="empty-root">
+        <button @click="ensureRoot" class="btn-action">Create Root Node</button>
+      </div>
     </div>
+    
   </div>
 </template>
 
 <style scoped>
 .bt-editor-wrapper {
   width: 100%;
+  box-sizing: border-box;
 }
+
+
+.bt-scroll-area {
+  width: 100%;
+  overflow-x: auto;
+  padding-bottom: 12px;
+
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-color) rgba(255, 255, 255, 0.05);
+}
+.bt-scroll-area::-webkit-scrollbar {
+  height: 6px;
+}
+.bt-scroll-area::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+.bt-scroll-area::-webkit-scrollbar-thumb {
+  background-color: var(--accent-color);
+  border-radius: 4px;
+}
+
+
+.bt-scroll-area :deep(.node-block) {
+  min-width: max-content; 
+}
+
 .root-label {
   font-size: 12px; font-weight: bold; color: var(--accent-color); margin-bottom: 5px;
 }

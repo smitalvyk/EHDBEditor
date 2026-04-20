@@ -250,34 +250,54 @@ const isTrigPlaySfx = (type) => type === 0;
 </template>
 
 <style scoped>
-.ammo-container { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.ammo-container { display: flex; flex-direction: column; gap: 10px; width: 100%; box-sizing: border-box; }
 
-.ve-item { background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-light); border-left-width: 4px; padding: 10px; border-radius: 4px; }
+.ve-item { background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-light); border-left-width: 4px; padding: 10px; border-radius: 4px; box-sizing: border-box; width: 100%; overflow: hidden; }
 .single-block { background: rgba(255, 255, 255, 0.02); }
 
-.ve-header { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; margin-bottom: 8px; }
+.ve-header { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .ve-index { font-weight: bold; color: var(--text-secondary); min-width: 25px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
-.type-select { flex: 1; font-weight: bold; color: var(--accent-color); }
+.type-select { flex: 1; font-weight: bold; color: var(--accent-color); min-width: 100px; }
 
-.btn-delete { background: rgba(255,50,50,0.1); color: #ff5555; border: 1px solid #ff5555; border-radius: 4px; cursor: pointer; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1; }
+.btn-delete { background: rgba(255,50,50,0.1); color: #ff5555; border: 1px solid #ff5555; border-radius: 4px; cursor: pointer; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1; flex-shrink: 0; }
 .btn-delete:hover { background: #ff5555; color: white; }
 
 .ve-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center; }
-.field-row { display: flex; align-items: center; gap: 8px; }
+.field-row { display: flex; align-items: center; gap: 8px; box-sizing: border-box; }
 .full-row { grid-column: span 2; }
-.field-row label { width: 65px; font-size: 10px; opacity: 0.7; overflow: hidden; white-space: nowrap; }
+.field-row label { width: 65px; font-size: 10px; opacity: 0.7; overflow: hidden; white-space: nowrap; flex-shrink: 0; }
 
-.win-input { flex: 1; padding: 4px; background: rgba(0,0,0,0.3); border: 1px solid #444; color: white; border-radius: 3px; font-size: 11px; min-width: 0; }
+.win-input { flex: 1; padding: 4px; background: rgba(0,0,0,0.3); border: 1px solid #444; color: white; border-radius: 3px; font-size: 11px; min-width: 0; box-sizing: border-box; }
 .win-input:focus { border-color: var(--accent-color); outline: none; }
 
-.color-wrap { flex: 1; display: flex; gap: 4px; align-items: center; }
-.color-picker { width: 20px; height: 20px; border: none; padding: 0; background: none; cursor: pointer; }
+.color-wrap { flex: 1; display: flex; gap: 4px; align-items: center; min-width: 0; }
+.color-picker { width: 20px; height: 20px; border: none; padding: 0; background: none; cursor: pointer; flex-shrink: 0; }
 .small-text { font-family: monospace; letter-spacing: -0.5px; }
 
 .check-row { justify-content: flex-start; cursor: pointer; margin-top: 4px; }
 .check-row label { cursor: pointer; width: auto; margin-right: 5px; }
 .check-row input { cursor: pointer; }
 
-.btn-add { padding: 10px; background: rgba(0,0,0,0.2); border: 1px dashed; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-weight: bold; }
+.btn-add { padding: 10px; background: rgba(0,0,0,0.2); border: 1px dashed; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-weight: bold; width: 100%; box-sizing: border-box; }
 .btn-add:hover { background: rgba(255,255,255,0.05); }
+
+/* === MOBILE STYLES === */
+@media (max-width: 600px) {
+  .ve-grid {
+    grid-template-columns: 1fr; /* Switch from 2 columns to 1 column */
+  }
+  .full-row {
+    grid-column: span 1; /* Reset span so it doesn't break single column */
+  }
+  .ve-item {
+    padding: 8px;
+    border-left-width: 2px;
+  }
+  .ve-header {
+    gap: 6px;
+  }
+  .field-row label {
+    width: 75px; /* Give label slightly more room if needed, or keep 65px */
+  }
+}
 </style>

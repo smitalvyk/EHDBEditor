@@ -40,10 +40,19 @@ export function useProjectDB() {
 
   const updateSingleFileInDB = async (fullPath, data) => {
     const db = await initDB();
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).put({ fullPath, data });
+      const store = tx.objectStore(STORE_NAME);
+      
+      // If data is null, physically delete the record from IndexedDB
+      if (data === null) {
+        store.delete(fullPath);
+      } else {
+        store.put({ fullPath, data });
+      }
+      
       tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
     });
   };
 

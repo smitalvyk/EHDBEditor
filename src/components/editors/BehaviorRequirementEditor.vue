@@ -123,20 +123,27 @@ const updateRequirement = (index, newVal) => {
 </template>
 
 <style scoped>
-.req-block { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; padding: 6px; margin-bottom: 6px; }
+.req-block { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; padding: 6px; margin-bottom: 6px; box-sizing: border-box; width: 100%; }
 .req-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
 .type-select-row { display: flex; align-items: center; gap: 8px; flex: 1; }
 .type-select-row label { font-size: 10px; color: var(--accent-color); font-weight: bold; white-space: nowrap; }
-.small-select { padding: 2px 4px; font-size: 11px; height: 24px; min-width: 120px; }
+.small-select { padding: 2px 4px; font-size: 11px; height: 24px; min-width: 120px; flex: 1; }
 .btn-delete-req { background: none; border: none; color: #ff5555; font-weight: bold; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 4px; }
 .req-body { display: flex; flex-direction: column; gap: 4px; padding-left: 4px; }
 .req-row { display: flex; align-items: center; gap: 6px; }
 .req-row label { width: 60px; font-size: 10px; opacity: 0.7; }
-.win-input { flex: 1; padding: 2px 4px; font-size: 11px; background: rgba(0,0,0,0.3); border: 1px solid #444; color: white; border-radius: 3px; }
+.win-input { flex: 1; padding: 2px 4px; font-size: 11px; background: rgba(0,0,0,0.3); border: 1px solid #444; color: white; border-radius: 3px; max-width: 100%; box-sizing: border-box; }
 /* NESTED */
 .nested-reqs { margin-top: 4px; padding-left: 8px; border-left: 1px dashed rgba(255,255,255,0.2); }
 .nested-header { font-size: 10px; opacity: 0.5; margin-bottom: 4px; }
 .req-list { display: flex; flex-direction: column; gap: 4px; }
-.btn-add-req { width: 100%; font-size: 10px; padding: 4px; background: rgba(255,255,255,0.05); border: 1px dashed #555; color: #aaa; cursor: pointer; margin-top: 4px; }
+.btn-add-req { width: 100%; font-size: 10px; padding: 4px; background: rgba(255,255,255,0.05); border: 1px dashed #555; color: #aaa; cursor: pointer; margin-top: 4px; box-sizing: border-box; }
 .btn-add-req:hover { background: rgba(255,255,255,0.1); color: white; }
+
+/* === MOBILE STYLES === */
+@media (max-width: 600px) {
+
+  .req-block { padding: 4px; }
+  .nested-reqs { padding-left: 4px; }
+}
 </style>

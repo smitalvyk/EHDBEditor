@@ -291,42 +291,52 @@ const updateRequirement = (v) => updateField('Requirement', v);
 </template>
 
 <style scoped>
-
-.node-block { background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-light); border-left-width: 4px; padding: 10px; border-radius: 4px; display: flex; flex-direction: column; gap: 8px; width: 100%; transition: border-color 0.3s; }
+.node-block { box-sizing: border-box; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-light); border-left-width: 4px; padding: 10px; border-radius: 4px; display: flex; flex-direction: column; gap: 8px; width: 100%; transition: border-color 0.3s; }
 .node-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; margin-bottom: 4px; }
 .type-select-row { display: flex; gap: 10px; align-items: center; flex: 1; }
 .type-select-row label { font-weight: bold; min-width: 60px; font-size: 12px; }
-.type-select { font-weight: bold; }
-.btn-delete-node { background: rgba(255, 50, 50, 0.1); border: 1px solid #ff5555; color: #ff5555; width: 24px; height: 24px; border-radius: 4px; cursor: pointer; font-size: 16px; line-height: 1; display: flex; align-items: center; justify-content: center; }
+.type-select { font-weight: bold; flex: 1; max-width: 100%; }
+.btn-delete-node { background: rgba(255, 50, 50, 0.1); border: 1px solid #ff5555; color: #ff5555; width: 24px; height: 24px; border-radius: 4px; cursor: pointer; font-size: 16px; line-height: 1; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .btn-delete-node:hover { background: #ff5555; color: white; }
 .node-row { display: flex; align-items: center; gap: 10px; min-height: 28px; }
 .node-row.vertical-start { align-items: flex-start; }
 .node-row label { width: 120px; font-size: 11px; color: var(--text-secondary); opacity: 0.8; margin-top: 6px; }
-.win-input { flex: 1; padding: 4px 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: white; border-radius: 4px; font-size: 12px; }
-.text-group { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.win-input { flex: 1; padding: 4px 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); color: white; border-radius: 4px; font-size: 12px; box-sizing: border-box; max-width: 100%; }
+.text-group { flex: 1; display: flex; flex-direction: column; gap: 4px; width: 100%; }
 .loc-preview-box { background: rgba(0, 0, 0, 0.3); border: 1px dashed var(--accent-color); border-radius: 4px; padding: 6px; font-size: 11px; }
 .loc-item { margin-bottom: 2px; line-height: 1.2; }
 .loc-file { color: var(--accent-color); font-weight: bold; margin-right: 4px; opacity: 0.8; }
 .loc-content { color: #ddd; }
 .loc-missing { color: #ffaa00; font-style: italic; opacity: 0.7; }
-.node-row-vertical { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 4px; }
+.node-row-vertical { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 4px; width: 100%; }
 .req-header-row { display: flex; justify-content: space-between; align-items: center; }
 .req-header-row label { font-size: 11px; font-weight: bold; color: #aaa; }
 .btn-action-small { padding: 2px 8px; font-size: 10px; background: transparent; border: 1px solid var(--accent-color); color: var(--accent-color); border-radius: 4px; cursor: pointer; }
 .btn-action-small:hover { background: var(--accent-color); color: white; }
-.node-list-section, .node-single-section { margin-top: 10px; padding-left: 15px; border-left: 2px solid; margin-left: 5px; }
+.node-list-section, .node-single-section { margin-top: 10px; padding-left: 15px; border-left: 2px solid; margin-left: 5px; width: 100%; box-sizing: border-box; }
 .list-header { font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 1px; }
-.children-list { display: flex; flex-direction: column; gap: 10px; }
-.child-wrapper { display: flex; gap: 8px; align-items: flex-start; width: 100%; }
-.child-controls { display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 10px; min-width: 20px; }
+.children-list { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.child-wrapper { display: flex; gap: 8px; align-items: flex-start; width: 100%; box-sizing: border-box; }
+.child-controls { display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 10px; min-width: 20px; flex-shrink: 0; }
 .index-badge { font-size: 10px; font-weight: bold; }
 .move-btns button { background: none; border: 1px solid #555; color: #888; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; margin-bottom: 2px; border-radius: 2px; }
 .move-btns button:hover:not(:disabled) { border-color: white; color: white; }
 .move-btns button:disabled { opacity: 0.2; border-color: transparent; }
 .list-actions { margin-top: 10px; }
-.btn-add-node { width: 100%; padding: 8px; border: 1px dashed; background: rgba(0,0,0,0.2); cursor: pointer; font-weight: bold; transition: all 0.2s; }
+.btn-add-node { width: 100%; padding: 8px; border: 1px dashed; background: rgba(0,0,0,0.2); cursor: pointer; font-weight: bold; transition: all 0.2s; box-sizing: border-box; }
 .btn-add-node:hover { background: rgba(255,255,255,0.05); }
 .color-group { display: flex; gap: 6px; flex: 1; align-items: center; }
-.color-picker { width: 30px; height: 30px; border: none; background: none; padding: 0; cursor: pointer; }
+.color-picker { width: 30px; height: 30px; border: none; background: none; padding: 0; cursor: pointer; flex-shrink: 0; }
 .color-text { font-family: monospace; }
+
+/* === MOBILE STYLES === */
+@media (max-width: 600px) {
+
+  .node-block { padding: 6px; border-left-width: 2px; }
+  .node-list-section, .node-single-section { padding-left: 8px; margin-left: 0px; border-left-width: 2px; }
+  .child-wrapper { gap: 4px; }
+  .child-controls { min-width: 16px; padding-top: 4px; }
+  .move-btns button { width: 16px; height: 16px; font-size: 10px; }
+  .win-input { font-size: 11px; padding: 4px 6px; }
+}
 </style>

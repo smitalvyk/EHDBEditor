@@ -45,7 +45,6 @@ const globSprites = import.meta.glob([
 const allLocalSprites = {};
 for (const path in globSprites) {
   if (path.startsWith('/public/')) {
-    // Prepend Vite's base URL so it works on GitHub Pages
     allLocalSprites[path] = import.meta.env.BASE_URL + path.replace('/public/', ''); 
   } else {
     allLocalSprites[path] = globSprites[path].default || globSprites[path];
@@ -54,6 +53,7 @@ for (const path in globSprites) {
 
 const iconUrl = ref(null);
 const modelUrl = ref(null);
+const techFactionColor = ref(null);
 
 // Image loading logic
 const resolveImage = async (fileName, itemType, isIconDir = false) => {
@@ -96,6 +96,7 @@ const resolveImage = async (fileName, itemType, isIconDir = false) => {
 watch(() => parsedData.value, async (newVal) => {
   iconUrl.value = null;
   modelUrl.value = null;
+  techFactionColor.value = null;
   
   if (newVal) {
     const typeId = Number(newVal.ItemType);
@@ -111,6 +112,45 @@ watch(() => parsedData.value, async (newVal) => {
       if (parentShip && parentShip.data) {
         if (parentShip.data.IconImage) iconUrl.value = await resolveImage(parentShip.data.IconImage, 6, true);
         if (parentShip.data.ModelImage) modelUrl.value = await resolveImage(parentShip.data.ModelImage, 6, false);
+      }
+    }
+    else if (typeId === 14) {
+      iconUrl.value = await resolveImage('star_icon', 14, false);
+    }
+    else if (typeId === 10) {
+
+      iconUrl.value = await resolveImage('tech_icon', 10, false);
+      
+
+      if (newVal.Faction !== undefined && newVal.Faction !== null) {
+        const factionsList = getItemsByType(14);
+        const factionObj = factionsList?.find(f => f.id === newVal.Faction);
+        if (factionObj && factionObj.data && factionObj.data.Color) {
+          techFactionColor.value = factionObj.data.Color;
+        }
+      }
+      
+
+      const techType = newVal.Type ?? 0;
+      const targetItemId = newVal.ItemId;
+      
+      if (targetItemId !== undefined && targetItemId !== null) {
+        let targetItemType = 1; 
+        if (techType === 1) targetItemType = 6; 
+        else if (techType === 2) targetItemType = 7; 
+        
+        const targetList = getItemsByType(targetItemType);
+        const targetItem = targetList?.find(i => i.id === targetItemId);
+        
+        if (targetItem && targetItem.data) {
+          let imgName = targetItem.data.Icon || targetItem.data.ModelImage || targetItem.data.Image;
+          if (targetItemType === 6) {
+            imgName = targetItem.data.IconImage || targetItem.data.ModelImage;
+            modelUrl.value = await resolveImage(imgName, 6, true);
+          } else {
+            modelUrl.value = await resolveImage(imgName, targetItemType, false);
+          }
+        }
       }
     }
     else {
@@ -175,18 +215,27 @@ const formatVal = (val) => {
            
            <div class="images-container">
               <template v-if="iconUrl || modelUrl">
+                 
                  <div class="icon-box" v-if="iconUrl" title="Icon">
                     <div class="image-stack">
                        <img :src="iconUrl" class="base-image" @error="e => e.target.style.display='none'" />
-                       <div v-if="parsedData.Color" class="tint-layer" :style="getTintStyle(iconUrl, parsedData.Color)"></div>
+                       <div v-if="(parsedData.ItemType === 10 ? techFactionColor : parsedData.Color)" 
+                            class="tint-layer" 
+                            :style="getTintStyle(iconUrl, parsedData.ItemType === 10 ? techFactionColor : parsedData.Color)">
+                       </div>
                     </div>
                  </div>
+
                  <div class="icon-box model-box" v-if="modelUrl" title="Model Image">
                     <div class="image-stack">
                        <img :src="modelUrl" class="base-image" @error="e => e.target.style.display='none'" />
-                       <div v-if="parsedData.Color" class="tint-layer" :style="getTintStyle(modelUrl, parsedData.Color)"></div>
+                       <div v-if="parsedData.Color && parsedData.ItemType !== 10" 
+                            class="tint-layer" 
+                            :style="getTintStyle(modelUrl, parsedData.Color)">
+                       </div>
                     </div>
                  </div>
+
               </template>
               
               <div class="icon-box empty" v-else>
@@ -232,7 +281,6 @@ const formatVal = (val) => {
 .preview-container { width: 100%; height: 100%; overflow-y: auto; box-sizing: border-box; }
 .item-card { background: var(--sidebar-bg, #2a2a2a); border: 1px solid var(--border-light, #444); border-radius: 12px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
 
-/* Added flex-wrap to allow elements to wrap on small screens */
 .card-header { display: flex; flex-wrap: wrap; gap: 24px; border-bottom: 1px dashed rgba(255, 255, 255, 0.1); padding-bottom: 24px; margin-bottom: 24px; }
 
 .images-container { display: flex; gap: 15px; flex-shrink: 0; }
@@ -240,17 +288,15 @@ const formatVal = (val) => {
 .model-box { border-color: rgba(85, 170, 255, 0.3); background: rgba(0, 0, 0, 0.3); }
 .icon-box.empty { border-style: dashed; }
 .no-icon { font-size: 11px; color: var(--text-secondary); font-weight: bold; letter-spacing: 1px; }
+
 .image-stack { position: relative; width: 90px; height: 90px; }
 .base-image { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5)); }
+
 .tint-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; -webkit-mask-size: 100% 100%; mask-size: 100% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; mix-blend-mode: multiply; pointer-events: none; }
 
-/* Added min-width to allow inner text to truncate or wrap properly */
 .title-area { flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
-
-/* Better word breaking for long names */
 .title-area h2 { margin: 0 0 10px 0; font-size: 26px; color: var(--accent-color, #55aaff); font-weight: 700; overflow-wrap: break-word; word-wrap: break-word; hyphens: auto; }
 
-/* Tags will wrap to the next line if needed */
 .tags { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
 .tag { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-family: monospace; font-weight: bold; letter-spacing: 0.5px; white-space: nowrap; }
 .id-tag { background: rgba(255, 170, 0, 0.15); color: #ffaa00; border: 1px solid rgba(255, 170, 0, 0.3); }
@@ -280,7 +326,6 @@ const formatVal = (val) => {
 .bool-no { color: #ff5555; opacity: 0.7; }
 .error-state { color: #ff5555; text-align: center; margin-top: 50px; font-size: 16px; font-weight: bold; }
 
-/* Mobile layout adjustments */
 @media (max-width: 600px) {
   .item-card { padding: 15px; }
   .card-header { flex-direction: column; gap: 15px; padding-bottom: 15px; margin-bottom: 15px; }

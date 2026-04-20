@@ -224,24 +224,16 @@ export const itemSchemas = {
     fields: {
       Id: f(FieldType.NUMBER, 'ID', { locked: true }),
       Type: f(FieldType.SELECT, 'Type', { options: SelectOptions.TechType }),
-      
-      // Item references (in XML these map to ItemId based on Type)
-      Component: f(FieldType.REFERENCE, 'Component', { targetType: ItemType.Component }),
-      Satellite: f(FieldType.REFERENCE, 'Satellite', { targetType: ItemType.Satellite }),
-      Ship: f(FieldType.REFERENCE, 'Ship', { targetType: ItemType.Ship }),
+      ItemId: f(FieldType.REFERENCE, 'Unlocked Item', { targetType: 'DYNAMIC_TECH' }),
       
       Faction: f(FieldType.REFERENCE, 'Faction', { targetType: ItemType.Faction }),
-      
-      // Settings and Limits
-      Price: f(FieldType.NUMBER, 'Price', { min: 0, max: 10000 }),
+      Price: f(FieldType.NUMBER, 'Price', { min: 0 }),
       CustomCraftingLevel: f(FieldType.NUMBER, 'Crafting Level', { min: 0 }),
       
-      // Flags
       Hidden: f(FieldType.CHECKBOX, 'Hidden'),
       Special: f(FieldType.CHECKBOX, 'Special'),
       DoesnPreventUnlocking: f(FieldType.CHECKBOX, 'Does Not Prevent Unlocking'),
       
-      // List (full width)
       Dependencies: f(FieldType.TAG_LIST, 'Dependencies', { targetType: ItemType.Technology, fullWidth: true })
     }
   },
