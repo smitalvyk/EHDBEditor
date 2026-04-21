@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { useGameDatabase } from '../composables/useGameDatabase';
+import { ItemTypeNames } from '../data/enums';
 
 const props = defineProps({
   isOpen: Boolean,
@@ -37,25 +38,9 @@ watch(mode, (newMode) => {
   }
 });
 
-// Type map for dropdown
-const typeMap = {
-  1: "Component", 2: "Device", 3: "Weapon", 4: "AmmunitionObsolete", 5: "DroneBay", 
-  6: "Ship", 7: "Satellite", 8: "ShipBuild", 9: "SatelliteBuild", 10: "Technology",
-  11: "ComponentStats", 12: "ComponentMod", 13: "Skill", 14: "Faction", 15: "Quest", 
-  16: "Loot", 18: "Fleet", 19: "Character", 20: "QuestItem", 25: "Ammunition",
-  26: "VisualEffect", 27: "BulletPrefab", 28: "BehaviorTree", 29: "GameObjectPrefab", 
-  30: "CombatRules", 31: "ComponentStatUpgrade", 32: "StatUpgradeTemplate", 
-  33: "FrontierLevel", 34: "FrontierCommonLevel", 35: "ComponentGroupTag",
-  100: "ShipSettings", 101: "GalaxySettings", 102: "DatabaseSettings",
-  103: "ExplorationSettings", 104: "FrontierSettings", 105: "ShipModSettings",
-  106: "SpecialEventSettings", 107: "SkillSettings", 108: "DebugSettings",
-  109: "CombatSettings", 110: "UiSettings", 111: "FactionsSettings",
-  112: "MusicPlaylist", 113: "ResearchSetting", 114: "PvpSettings",
-  115: "FrontierNpcSettings", 116: "FrontierLevelSettings",
-  117: "LocalizationSettings", 118: "WeaponSlots"
-};
-
-const availableTypes = Object.entries(typeMap)
+// === DYNAMIC LIST OF TYPES ===
+const availableTypes = Object.entries(ItemTypeNames)
+  .filter(([id]) => id !== '0')
   .map(([id, name]) => ({ value: Number(id), label: name }))
   .sort((a, b) => a.label.localeCompare(b.label));
 

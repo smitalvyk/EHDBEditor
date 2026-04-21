@@ -303,7 +303,9 @@ for (const path in globSprites) {
 const resolveImageUrl = async (fileName, fieldName, currentItemType) => {
   if (!fileName) return null;
   
-  if (typeof searchImageFile === 'function') {
+  const hasExtension = /\.[a-zA-Z0-9]+$/.test(fileName);
+  
+  if (hasExtension && typeof searchImageFile === 'function') {
     const handle = searchImageFile(fileName);
     if (handle) {
       try {
@@ -337,10 +339,9 @@ const resolveImageUrl = async (fileName, fieldName, currentItemType) => {
   }
 
   if (!foundKey) foundKey = Object.keys(allLocalSprites).find(key => key.toLowerCase().endsWith(`/${nameLower}`));
-  if (foundKey) return allLocalSprites[foundKey];
-  return `/sprites/${nameToFind}`;
+  
+  return foundKey ? allLocalSprites[foundKey] : null;
 };
-
 // === TAG IMAGE LOADING LOGIC ===
 const tagImagesCache = ref({});
 

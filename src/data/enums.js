@@ -7,13 +7,12 @@ export const ItemType = {
   Quest: 15, Loot: 16, Fleet: 18, Character: 19, QuestItem: 20, Ammunition: 25,
   VisualEffect: 26, BulletPrefab: 27, BehaviorTree: 28, GameObjectPrefab: 29,
   CombatRules: 30, ComponentStatUpgrade: 31, StatUpgradeTemplate: 32,
-  FrontierLevel: 33, FrontierCommonLevel: 34, ComponentGroupTag: 35,
+  ComponentGroupTag: 35,
   ShipSettings: 100, GalaxySettings: 101, DatabaseSettings: 102,
-  ExplorationSettings: 103, FrontierSettings: 104, ShipModSettings: 105,
+  ExplorationSettings: 103, ShipModSettings: 105,
   SpecialEventSettings: 106, SkillSettings: 107, DebugSettings: 108,
   CombatSettings: 109, UiSettings: 110, FactionsSettings: 111, MusicPlaylist: 112,
-  ResearchSetting: 113, PvpSettings: 114, FrontierNpcSettings: 115,
-  FrontierLevelSettings: 116, LocalizationSettings: 117, WeaponSlots: 118,
+  LocalizationSettings: 117, WeaponSlots: 118,
 };
 
 export const ItemTypeNames = Object.fromEntries(

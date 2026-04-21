@@ -58,8 +58,8 @@ const techFactionColor = ref(null);
 // Image loading logic
 const resolveImage = async (fileName, itemType, isIconDir = false) => {
   if (!fileName) return null;
-
-  if (typeof searchImageFile === 'function') {
+  const hasExtension = /\.[a-zA-Z0-9]+$/.test(fileName);
+  if (hasExtension && typeof searchImageFile === 'function') {
     const handle = searchImageFile(fileName);
     if (handle) {
       try {
@@ -75,7 +75,6 @@ const resolveImage = async (fileName, itemType, isIconDir = false) => {
       }
     }
   }
-
   const nameLower = fileName.includes('.') ? fileName.toLowerCase() : `${fileName.toLowerCase()}.png`;
   let foundKey = null;
 
@@ -90,8 +89,10 @@ const resolveImage = async (fileName, itemType, isIconDir = false) => {
   if (!foundKey) {
     foundKey = Object.keys(allLocalSprites).find(key => key.toLowerCase().endsWith(`/${nameLower}`));
   }
-  return foundKey ? allLocalSprites[foundKey] : `${import.meta.env.BASE_URL}sprites/${nameLower}`;
+  
+  return foundKey ? allLocalSprites[foundKey] : null;
 };
+
 
 watch(() => parsedData.value, async (newVal) => {
   iconUrl.value = null;

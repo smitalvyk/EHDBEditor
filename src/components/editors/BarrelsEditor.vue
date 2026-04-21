@@ -138,7 +138,7 @@ const removeBarrel = (idx) => {
                     <circle cx="0" cy="0" :r="Math.max(0, 0.06 * (1 + (item.Offset ?? 0)))" fill="none" stroke="red" stroke-width="0.015" />
                     
                     <circle cx="0" cy="0" r="0.08" fill="#1e1e1e" stroke="#ffff00" stroke-width="0.01" />
-                    <text x="0" y="0.01" font-size="0.09" fill="#ffff00" text-anchor="middle" dominant-baseline="central" font-weight="bold" transform="scale(1, -1)">
+                    <text x="0" y="0.01" font-size="0.09" fill="#ffff00" text-anchor="middle" dominant-baseline="central" font-weight="bold" :transform="`rotate(${-(item.Rotation ?? 0)}) scale(1, -1)`">
                       {{ idx + 1 }}
                     </text>
 

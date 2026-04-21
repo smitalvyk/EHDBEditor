@@ -19,6 +19,7 @@ const isJson = computed(() => props.file.name.toLowerCase().endsWith('.json'));
 const isXml = computed(() => props.file.name.toLowerCase().endsWith('.xml'));
 const isImage = computed(() => ['png', 'jpg', 'jpeg', 'gif'].includes(props.file.name.split('.').pop().toLowerCase()));
 const isAudio = computed(() => ['ogg', 'ogv', 'wav', 'mp3'].includes(props.file.name.split('.').pop().toLowerCase()));
+const isIdFile = computed(() => props.file.name.toLowerCase() === 'id');
 
 // --- Media data ---
 const imageDimensions = ref({ w: 0, h: 0 });
@@ -143,15 +144,15 @@ const previewText = computed(() => {
           <template v-else-if="isAudio">🎵</template>
           <template v-else-if="isXml">🌐</template>
           <template v-else-if="isJson">📄</template>
-          <template v-else>❓</template>
+          <template v-else-if="isIdFile">🔑</template> <template v-else>❓</template>
         </span>
         <h2 class="file-name">{{ file.name }}</h2>
       </div>
 
       <div class="editor-buttons">
         
-        <button v-if="isJson || isXml" @click="$emit('open-editor')" class="btn-action btn-code">
-          <span class="icon">{}</span> {{ isXml ? 'RAW XML' : 'RAW JSON' }}
+        <button v-if="isJson || isXml || isIdFile" @click="$emit('open-editor')" class="btn-action btn-code">
+          <span class="icon">{}</span> {{ isXml ? 'RAW XML' : (isIdFile ? 'EDIT ID' : 'RAW JSON') }}
         </button>
         
         <button v-if="isJson" @click="$emit('open-visual')" class="btn-action btn-visual">
@@ -233,7 +234,7 @@ const previewText = computed(() => {
         <audio v-if="audioUrl" controls :src="audioUrl" class="audio-player"></audio>
       </div>
 
-      <div v-else-if="isXml" class="text-wrapper">
+      <div v-else-if="isXml || isIdFile" class="text-wrapper">
         <pre class="code-view">{{ previewText }}</pre>
       </div>
 

@@ -329,6 +329,42 @@ const createNewFileInSystem = async (fullPath, content) => {
   }
 };
 
+const ensureIdFileExists = async () => {
+  if (!rootHandle.value) return;
+  
+  const findFileByNameGlobal = (nodes, targetName) => {
+    const lowerTarget = targetName.toLowerCase();
+    for (const node of nodes) {
+      if (node.kind === 'file' && node.name.toLowerCase() === lowerTarget) {
+        return node;
+      }
+      if (node.children) {
+        const found = findFileByNameGlobal(node.children, targetName);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const existingIdFile = findFileByNameGlobal(filesTree.value, 'id');
+  
+  if (!existingIdFile) {
+    const uuid = window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'mod-' + Date.now();
+    const defaultContent = `NewMod\n${uuid}`;
+    
+    try {
+      await createNewFileInSystem('id', defaultContent);
+      injectNodeIntoTree(filesTree.value, ['id'], 'id', false);
+      filteredFilesTree.value = [...filesTree.value];
+      console.log("Generated missing 'id' file at root.");
+    } catch (e) {
+      console.error("Failed to generate 'id' file", e);
+    }
+  } else {
+    console.log(`File 'id' found at: ${existingIdFile.fullPath || existingIdFile.name}. Skipping creation.`);
+  }
+};
+
 const handleSingleFix = async (err) => {
   if (!err || !err.fixInfo) return;
   
@@ -532,6 +568,7 @@ const handleZipSelect = async (event) => {
     clearDatabase();
     
     setTimeout(async () => {
+      await ensureIdFileExists();
       await scanAllFiles(filesTree.value, '');
       await loadAllDictionaries();
       isScanning.value = false;
@@ -621,6 +658,7 @@ const startIndexing = () => {
     totalFilesToScan.value = countFiles(filesTree.value);
     clearDatabase();
     setTimeout(async () => {
+      await ensureIdFileExists();
       if (rootHandle.value && !isZipMode.value) await initNotes(rootHandle.value);
       await scanAllFiles(filesTree.value, '');
       await loadAllDictionaries();
@@ -801,6 +839,7 @@ onMounted(async () => {
       clearDatabase();
       
       setTimeout(async () => {
+        await ensureIdFileExists();
         await scanAllFiles(root, '');
         await loadAllDictionaries();
         isScanning.value = false;

@@ -19,6 +19,12 @@ const errorLine = ref(null);
 const editorRef = ref(null);
 const lineNumbersRef = ref(null);
 
+// === FILE TYPE DETECTION ===
+const isJsonFile = computed(() => {
+  const fileName = props.file?.name || '';
+  return fileName.toLowerCase().endsWith('.json');
+});
+
 // === LINE NUMBERS ===
 const lineCount = computed(() => {
   if (!localContent.value) return 1;
@@ -32,8 +38,17 @@ const syncScroll = () => {
   }
 };
 
-// === JSON VALIDATION ===
+// === VALIDATION ===
 const validateJson = (text) => {
+
+  if (!isJsonFile.value) {
+    isValidJson.value = true;
+    jsonErrorMsg.value = '';
+    errorPosition.value = null;
+    errorLine.value = null;
+    return;
+  }
+
   if (!text || !text.trim()) {
     isValidJson.value = false;
     jsonErrorMsg.value = 'File cannot be empty';
@@ -142,7 +157,7 @@ const jumpToError = () => {
               :disabled="!isValidJson" 
               :class="{ 'btn-disabled': !isValidJson }"
             >
-              Save JSON
+              {{ isJsonFile ? 'Save JSON' : 'Save File' }}
             </button>
             <button @click="emit('close')" class="btn-close">Close</button>
           </div>
@@ -174,7 +189,7 @@ const jumpToError = () => {
         </div>
 
         <div 
-          v-if="!isValidJson" 
+          v-if="!isValidJson && isJsonFile" 
           class="modal-footer error-footer" 
           @click="jumpToError" 
           title="Click to jump to error location"
